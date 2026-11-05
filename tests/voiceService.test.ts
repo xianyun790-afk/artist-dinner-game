@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVoiceCatalog, voicesForModel, defaultServiceVoice, validateServiceVoice, loadVoiceCatalog, synthesizeVoice, synthesisBody, serviceUrl } from '../src/lib/voiceService.ts';
+import { parseVoiceCatalog, voicesForModel, defaultServiceVoice, validateServiceVoice, loadVoiceCatalog, connectVoiceCatalog, synthesizeVoice, synthesisBody, serviceUrl } from '../src/lib/voiceService.ts';
 const config = { providers: {
   minimax: { ready: true, defaultModel: 'speech-2.8-hd', defaultVoice: 'default', apiKey: 'DO-NOT-COPY', models: [{ id: 'speech-2.8-hd' }, { id: 'speech-2.8-turbo' }], voices: [{ id: 'default', name: '默认' }, { id: 'Chinese (Mandarin)_Gentleman', name: '温润' }] },
   aliyun: { ready: true, defaultModel: 'cosyvoice-v3-plus', defaultVoice: 'base', models: [{ id: 'cosyvoice-v3-plus' }, { id: 'cosyvoice-v3.5-plus', voices: [] }], voices: [{ id: 'base', name: '系统音色' }] },
@@ -74,4 +74,43 @@ test('provider controls preserve each API scale while text and tuning remain bou
   assert.equal(synthesisBody({ provider: 'sensetime', model: 'm', voice: 'v' }, 'test', 1, 1).options.volume, 0);
   assert.throws(() => synthesisBody({ provider: 'minimax', model: 'm', voice: 'v' }, ' ', 1, 1));
   assert.throws(() => synthesisBody({ provider: 'minimax', model: 'm', voice: 'v' }, 'x'.repeat(1001), 1, 1));
+});
+
+
+test('a slow optional library leaves system voices connected and does not abort the parent request', async () => {
+  const controller = new AbortController();
+  const fetcher = (async (url, init) => {
+    if (String(url).endsWith('/api/config')) return new Response(JSON.stringify(config));
+    return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true }));
+  }) as typeof fetch;
+  const result = await loadVoiceCatalog('http://example.test', controller.signal, fetcher, { libraryMs: 5 });
+  assert.equal(controller.signal.aborted, false);
+  assert.equal(result.libraryUnavailable, true);
+  assert.equal(defaultServiceVoice('monet', result)?.voice, 'Chinese (Mandarin)_Gentleman');
+});
+test('a timed out startup config reconnects once and then loads the catalog normally', async () => {
+  let configs = 0, libraries = 0;
+  const fetcher = (async (url, init) => {
+    if (String(url).endsWith('/api/config')) {
+      configs++;
+      if (configs === 1) return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Timeout', 'AbortError')), { once: true }));
+      return new Response(JSON.stringify(config));
+    }
+    libraries++; return new Response(JSON.stringify(library));
+  }) as typeof fetch;
+  const result = await connectVoiceCatalog('http://example.test', new AbortController().signal, fetcher, { configMs: 5 });
+  assert.equal(configs, 2); assert.equal(libraries, 1);
+  assert.equal(result.libraryUnavailable, false);
+});
+test('explicit cancellation propagates through library loading without reconnecting', async () => {
+  const controller = new AbortController(); let configs = 0;
+  const fetcher = (async (url, init) => {
+    if (String(url).endsWith('/api/config')) { configs++; return new Response(JSON.stringify(config)); }
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true });
+      queueMicrotask(() => controller.abort());
+    });
+  }) as typeof fetch;
+  await assert.rejects(connectVoiceCatalog('http://example.test', controller.signal, fetcher), { name: 'AbortError' });
+  assert.equal(configs, 1);
 });

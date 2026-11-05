@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Artist } from './types';
-import { defaultServiceVoice, loadVoiceCatalog, synthesizeVoice, validateServiceVoice, voicesForModel, type VoiceCatalog } from './voiceService';
+import { defaultServiceVoice, connectVoiceCatalog, synthesizeVoice, validateServiceVoice, voicesForModel, type VoiceCatalog } from './voiceService';
 const serviceBase = (import.meta.env.VITE_VOICE_SERVICE_URL || '').trim();
 export const voiceEngineFor = (a: Artist) => a.voiceEngine ?? (a.voiceURI || !serviceBase ? 'device' : 'service');
 export function useSpeech() {
@@ -10,6 +10,7 @@ export function useSpeech() {
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [connection, setConnection] = useState<'off' | 'connecting' | 'ready' | 'error'>(serviceBase ? 'connecting' : 'off');
   const [connectionError, setConnectionError] = useState('');
+  const connectionTask = useRef<Promise<VoiceCatalog | null> | null>(null);
   const completion = useRef<(() => void) | null>(null);
   const seq = useRef(0), utterance = useRef<SpeechSynthesisUtterance | null>(null);
   const request = useRef<AbortController | null>(null), catalogRequest = useRef<AbortController | null>(null);
@@ -29,21 +30,34 @@ export function useSpeech() {
     if (!serviceBase) return;
     try { context.current ??= new AudioContext(); if (context.current.state === 'suspended') void context.current.resume().catch(() => {}); } catch { /* Device speech remains available. */ }
   }, []);
-  const refresh = useCallback(async () => {
-    if (!serviceBase) return;
-    catalogRequest.current?.abort(); const controller = new AbortController(); catalogRequest.current = controller;
+  const refresh = useCallback((): Promise<VoiceCatalog | null> => {
+    if (!serviceBase) return Promise.resolve(null);
+    if (connectionTask.current) return connectionTask.current;
+    const controller = new AbortController(); catalogRequest.current = controller;
     setConnection('connecting'); setConnectionError('');
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const result = await loadVoiceCatalog(serviceBase, controller.signal);
-      if (catalogRequest.current !== controller) return;
-      setCatalog(result); setConnection('ready');
-    } catch {
-      if (catalogRequest.current !== controller) return;
-      setCatalog(null); setConnection('error'); setConnectionError('没有连上音色服务。可以重新连接，或使用设备音色。');
-    } finally { clearTimeout(timer); }
+    const task = (async () => {
+      try {
+        const result = await connectVoiceCatalog(serviceBase, controller.signal);
+        if (catalogRequest.current !== controller) return null;
+        setCatalog(result); setConnection('ready'); setError('');
+        return result;
+      } catch (error) {
+        if (catalogRequest.current !== controller) return null;
+        setConnection('error');
+        const detail = error instanceof Error && error.message.includes('超时') ? '连接超时，已自动重试一次。' : '暂时无法访问音色服务，已自动重试一次。';
+        setConnectionError(`${detail}可以重新连接；请确认当前设备能访问服务所在网络。`);
+        return null;
+      } finally { if (catalogRequest.current === controller) connectionTask.current = null; }
+    })();
+    connectionTask.current = task;
+    return task;
   }, []);
-  useEffect(() => { void refresh(); return () => { catalogRequest.current?.abort(); catalogRequest.current = null; }; }, [refresh]);
+  useEffect(() => { void refresh(); return () => { catalogRequest.current?.abort(); catalogRequest.current = null; connectionTask.current = null; }; }, [refresh]);
+  useEffect(() => {
+    const retry = () => { if (!document.hidden && connection === 'error') void refresh(); };
+    window.addEventListener('online', retry); document.addEventListener('visibilitychange', retry);
+    return () => { window.removeEventListener('online', retry); document.removeEventListener('visibilitychange', retry); };
+  }, [connection, refresh]);
   useEffect(() => {
     if (!available) return;
     const update = () => setVoices(window.speechSynthesis.getVoices());
@@ -71,17 +85,21 @@ export function useSpeech() {
       catch { setLoading(false); setSpeaking(false); setError('声音暂时不可用，可继续看字幕。'); finish(); }
     };
     if (voiceEngineFor(a) === 'device') { device(); return completed; }
-    const choice = voiceFor(a);
-    if (!serviceBase || !catalog || !choice || !validateServiceVoice(choice, catalog)) {
-      setError(a.serviceVoice ? '所选服务音色当前不可用，本次改用设备音色。' : '音色服务暂不可用，本次改用设备音色。'); device(true); return completed;
-    }
-    const provider = catalog.providers.find(p => p.id === choice.provider)!;
-    const label = voicesForModel(provider, choice.model).find(v => v.id === choice.voice)?.name || choice.voice;
-    setLoading(true); setStatus('正在准备声音…');
+    setLoading(true); setStatus(connection === 'ready' ? '正在准备声音…' : '正在连接音色服务…');
     const controller = new AbortController(); request.current = controller;
-    const timer = setTimeout(() => controller.abort(), 20000);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
       try {
+        const liveCatalog = connection === 'ready' && catalog ? catalog : await refresh();
+        if (turn !== seq.current) return;
+        const choice = a.serviceVoice ?? (liveCatalog ? defaultServiceVoice(a.id, liveCatalog) : undefined);
+        if (!serviceBase || !liveCatalog || !choice || !validateServiceVoice(choice, liveCatalog)) {
+          setError(a.serviceVoice && liveCatalog ? '所选服务音色当前不可用，本次改用设备音色。' : '没有连上音色服务，本次改用设备音色。可在声音设置中重新连接。'); device(true); return;
+        }
+        const provider = liveCatalog.providers.find(p => p.id === choice.provider)!;
+        const label = voicesForModel(provider, choice.model).find(v => v.id === choice.voice)?.name || choice.voice;
+        setStatus('正在准备声音…');
+        timer = setTimeout(() => controller.abort(), 20000);
         const audio = await synthesizeVoice(serviceBase, choice, text, a.rate, a.pitch, controller.signal);
         clearTimeout(timer);
         if (turn !== seq.current) return;
@@ -98,7 +116,7 @@ export function useSpeech() {
       } finally { clearTimeout(timer); if (request.current === controller) request.current = null; }
     })();
     return completed;
-  }, [available, voices, stop, unlock, voiceFor, catalog]);
+  }, [available, voices, stop, unlock, catalog, connection, refresh]);
   return { voices, speaking, loading, error, status, play, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
 }
 export type SpeechController = ReturnType<typeof useSpeech>;

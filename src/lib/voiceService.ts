@@ -81,15 +81,38 @@ async function jsonResponse(response: Response): Promise<unknown> {
   if (record(data).ok === false) throw new Error('音色服务未能完成这次请求。');
   return data;
 }
-export async function loadVoiceCatalog(base: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<VoiceCatalog> {
+interface CatalogTimeouts { configMs?: number; libraryMs?: number }
+async function timedJson(url: string, signal: AbortSignal, timeoutMs: number, fetcher: typeof fetch): Promise<unknown> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal.reason);
+  if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  try {
+    return await jsonResponse(await fetcher(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' }));
+  } catch (error) {
+    if (timedOut && !signal.aborted) throw new Error('音色服务连接超时。');
+    throw error;
+  } finally { clearTimeout(timer); signal.removeEventListener('abort', abort); }
+}
+export async function loadVoiceCatalog(base: string, signal: AbortSignal, fetcher: typeof fetch = fetch, timeouts: CatalogTimeouts = {}): Promise<VoiceCatalog> {
   const root = serviceUrl(base);
-  const config = await jsonResponse(await fetcher(`${root}/api/config`, { signal, cache: 'no-store', credentials: 'omit' }));
+  const config = await timedJson(`${root}/api/config`, signal, timeouts.configMs ?? 8000, fetcher);
   let library: unknown = {}, libraryUnavailable = false;
-  try { library = await jsonResponse(await fetcher(`${root}/api/library`, { signal, cache: 'no-store', credentials: 'omit' })); }
+  // An optional library timeout must not abort the successful system catalog.
+  try { library = await timedJson(`${root}/api/library`, signal, timeouts.libraryMs ?? 2500, fetcher); }
   catch (e) { if (signal.aborted) throw e; libraryUnavailable = true; }
   const catalog = parseVoiceCatalog(config, library, libraryUnavailable);
   if (!catalog.providers.length) throw new Error('音色服务尚无可用平台。');
   return catalog;
+}
+export async function connectVoiceCatalog(base: string, signal: AbortSignal, fetcher: typeof fetch = fetch, timeouts: CatalogTimeouts = {}): Promise<VoiceCatalog> {
+  try { return await loadVoiceCatalog(base, signal, fetcher, timeouts); }
+  catch (error) {
+    if (signal.aborted) throw error;
+    // Retry connection metadata once. Never retry /api/tts automatically.
+    return loadVoiceCatalog(base, signal, fetcher, timeouts);
+  }
 }
 
 const bounded = (v: number, low: number, high: number, fallback = 1) => Number.isFinite(v) ? Math.min(high, Math.max(low, v)) : fallback;
