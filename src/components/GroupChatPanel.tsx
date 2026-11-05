@@ -27,6 +27,6 @@ export function GroupChatPanel({ catalog, groups, activeId, onCreate, onJoin, on
       </div>}
     </section>}
     {activeId && <button className="text-btn group-leave" onClick={onLeave}>结束本次群聊，回到自由聊天</button>}
-    <p className="form-note">群聊记录单独保存在本机，可从这里继续；不会带入你与其他艺术家的单独对话。目前是本地剧本群聊，不是真人联网房间。</p>
+    <p className="form-note">群聊记录单独保存在本机，可从这里继续；不会带入你与其他艺术家的单独对话。发言由当前配置的对话服务生成，未配置或失败时使用本地剧本；此处是艺术家角色群聊。</p>
   </div>;
 }

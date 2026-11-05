@@ -45,6 +45,7 @@ function groupAngle(a: Artist, text: string): string {
 // but must never present or synthesize another participant's reply.
 export async function playGroupRound(replies: GroupReply[], signal: AbortSignal, callbacks: {
   thinking: (reply: GroupReply) => void;
+  generate?: (reply: GroupReply, signal: AbortSignal) => Promise<GroupReply>;
   present: (reply: GroupReply) => void;
   speak: (reply: GroupReply) => Promise<void>;
   pause: (signal: AbortSignal) => Promise<void>;
@@ -54,8 +55,10 @@ export async function playGroupRound(replies: GroupReply[], signal: AbortSignal,
     callbacks.thinking(reply);
     await callbacks.pause(signal);
     if (signal.aborted) return;
-    callbacks.present(reply);
-    await callbacks.speak(reply);
+    const generated = callbacks.generate ? await callbacks.generate(reply, signal) : reply;
+    if (signal.aborted) return;
+    callbacks.present(generated);
+    await callbacks.speak(generated);
   }
 }
 export const groupPause = (signal: AbortSignal) => new Promise<void>(resolve => {

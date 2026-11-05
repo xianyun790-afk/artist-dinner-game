@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env*
 !.env.example
+!.env.server.example
 .DS_Store
 *.blend1
 *.blend2

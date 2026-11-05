@@ -72,3 +72,15 @@ test('old saves migrate without groups; invalid group data is dropped without lo
   assert.deepEqual(loaded.save.people, JSON.parse(JSON.stringify(save.people)));
   Reflect.deleteProperty(globalThis, 'localStorage');
 });
+
+test('interrupting model generation prevents presenting and voicing its late result', async () => {
+  const replies = groupReplies('大家聊聊星空', members, [], null), controller = new AbortController();
+  let finish!: () => void, presented = 0, spoken = 0;
+  const generating = new Promise<void>(resolve => { finish = resolve; });
+  const round = playGroupRound(replies, controller.signal, {
+    thinking: () => {}, pause: async () => {}, generate: async reply => { await generating; return reply; },
+    present: () => { presented++; }, speak: async () => { spoken++; },
+  });
+  await Promise.resolve(); controller.abort(); finish(); await round;
+  assert.equal(presented, 0); assert.equal(spoken, 0);
+});
