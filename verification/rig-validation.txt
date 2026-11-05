@@ -1,0 +1,276 @@
+[
+  {
+    "file": "public/models/monet.glb",
+    "meshes": 1,
+    "skinned_mesh_nodes": [
+      {
+        "node": "monet_PortraitSkin",
+        "joints": 4,
+        "invalid_weight_vertices": 0
+      }
+    ],
+    "weighted_vertices_checked": 1225,
+    "animations": [
+      {
+        "name": "Idle",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "154f973d45a97743"
+      },
+      {
+        "name": "Talk",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "e13441f3ae644488"
+      },
+      {
+        "name": "Curious",
+        "channels": 12,
+        "moving_channels": 1,
+        "duration": 2.0000000782310963,
+        "sample_hash": "028e08cabb63d8e4"
+      },
+      {
+        "name": "Excited",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "9fbf91c248cd099c"
+      },
+      {
+        "name": "Upset",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "7888173011cb565a"
+      }
+    ],
+    "errors": [],
+    "ok": true
+  }
+]
+[
+  {
+    "file": "public/models/vincent.glb",
+    "meshes": 1,
+    "skinned_mesh_nodes": [
+      {
+        "node": "vincent_PortraitSkin",
+        "joints": 4,
+        "invalid_weight_vertices": 0
+      }
+    ],
+    "weighted_vertices_checked": 1225,
+    "animations": [
+      {
+        "name": "Idle",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "154f973d45a97743"
+      },
+      {
+        "name": "Talk",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "e13441f3ae644488"
+      },
+      {
+        "name": "Curious",
+        "channels": 12,
+        "moving_channels": 1,
+        "duration": 2.0000000782310963,
+        "sample_hash": "028e08cabb63d8e4"
+      },
+      {
+        "name": "Excited",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "9fbf91c248cd099c"
+      },
+      {
+        "name": "Upset",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "7888173011cb565a"
+      }
+    ],
+    "errors": [],
+    "ok": true
+  }
+]
+[
+  {
+    "file": "public/models/dali.glb",
+    "meshes": 1,
+    "skinned_mesh_nodes": [
+      {
+        "node": "dali_PortraitSkin",
+        "joints": 4,
+        "invalid_weight_vertices": 0
+      }
+    ],
+    "weighted_vertices_checked": 1225,
+    "animations": [
+      {
+        "name": "Idle",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "154f973d45a97743"
+      },
+      {
+        "name": "Talk",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "e13441f3ae644488"
+      },
+      {
+        "name": "Curious",
+        "channels": 12,
+        "moving_channels": 1,
+        "duration": 2.0000000782310963,
+        "sample_hash": "028e08cabb63d8e4"
+      },
+      {
+        "name": "Excited",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "9fbf91c248cd099c"
+      },
+      {
+        "name": "Upset",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "7888173011cb565a"
+      }
+    ],
+    "errors": [],
+    "ok": true
+  }
+]
+[
+  {
+    "file": "public/models/georgia.glb",
+    "meshes": 1,
+    "skinned_mesh_nodes": [
+      {
+        "node": "georgia_PortraitSkin",
+        "joints": 4,
+        "invalid_weight_vertices": 0
+      }
+    ],
+    "weighted_vertices_checked": 1225,
+    "animations": [
+      {
+        "name": "Idle",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "154f973d45a97743"
+      },
+      {
+        "name": "Talk",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "e13441f3ae644488"
+      },
+      {
+        "name": "Curious",
+        "channels": 12,
+        "moving_channels": 1,
+        "duration": 2.0000000782310963,
+        "sample_hash": "028e08cabb63d8e4"
+      },
+      {
+        "name": "Excited",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "9fbf91c248cd099c"
+      },
+      {
+        "name": "Upset",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "7888173011cb565a"
+      }
+    ],
+    "errors": [],
+    "ok": true
+  }
+]
+[
+  {
+    "file": "public/models/lin.glb",
+    "meshes": 1,
+    "skinned_mesh_nodes": [
+      {
+        "node": "lin_PortraitSkin",
+        "joints": 4,
+        "invalid_weight_vertices": 0
+      }
+    ],
+    "weighted_vertices_checked": 1225,
+    "animations": [
+      {
+        "name": "Idle",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "154f973d45a97743"
+      },
+      {
+        "name": "Talk",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "e13441f3ae644488"
+      },
+      {
+        "name": "Curious",
+        "channels": 12,
+        "moving_channels": 1,
+        "duration": 2.0000000782310963,
+        "sample_hash": "028e08cabb63d8e4"
+      },
+      {
+        "name": "Excited",
+        "channels": 12,
+        "moving_channels": 3,
+        "duration": 2.0000000782310963,
+        "sample_hash": "9fbf91c248cd099c"
+      },
+      {
+        "name": "Upset",
+        "channels": 12,
+        "moving_channels": 2,
+        "duration": 2.0000000782310963,
+        "sample_hash": "7888173011cb565a"
+      }
+    ],
+    "errors": [],
+    "ok": true
+  }
+]
+[
+  {
+    "file": "public/models/salon.glb",
+    "meshes": 5,
+    "skinned_mesh_nodes": [],
+    "weighted_vertices_checked": 0,
+    "animations": [],
+    "errors": [],
+    "ok": true
+  }
+]
