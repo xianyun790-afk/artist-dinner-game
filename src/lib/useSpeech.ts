@@ -10,11 +10,13 @@ export function useSpeech() {
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [connection, setConnection] = useState<'off' | 'connecting' | 'ready' | 'error'>(serviceBase ? 'connecting' : 'off');
   const [connectionError, setConnectionError] = useState('');
+  const completion = useRef<(() => void) | null>(null);
   const seq = useRef(0), utterance = useRef<SpeechSynthesisUtterance | null>(null);
   const request = useRef<AbortController | null>(null), catalogRequest = useRef<AbortController | null>(null);
   const context = useRef<AudioContext | null>(null), source = useRef<AudioBufferSourceNode | null>(null);
   const available = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const release = useCallback(() => {
+    completion.current?.(); completion.current = null;
     seq.current++; request.current?.abort(); request.current = null;
     if (source.current) { source.current.onended = null; try { source.current.stop(); } catch { /* Already ended. */ } source.current.disconnect(); source.current = null; }
     if (utterance.current) { utterance.current.onend = null; utterance.current.onerror = null; utterance.current.onstart = null; }
@@ -52,24 +54,26 @@ export function useSpeech() {
   const voiceFor = useCallback((a: Artist) => a.serviceVoice ?? (catalog ? defaultServiceVoice(a.id, catalog) : undefined), [catalog]);
   const play = useCallback((text: string, a: Artist) => {
     stop(); setError(''); unlock(); const turn = seq.current;
+    const completed = new Promise<void>(resolve => { completion.current = resolve; });
+    const finish = () => { if (turn === seq.current) { completion.current?.(); completion.current = null; } };
     const device = (fallback = false) => {
       if (turn !== seq.current) return;
-      if (!available) { setLoading(false); setSpeaking(false); setError('这段声音暂时不可用，可继续看字幕。'); return; }
+      if (!available) { setLoading(false); setSpeaking(false); setError('这段声音暂时不可用，可继续看字幕。'); finish(); return; }
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'zh-CN'; u.rate = a.rate; u.pitch = a.pitch;
       const selected = voices.find(v => v.voiceURI === a.voiceURI) ?? voices.find(v => /zh[-_]CN/i.test(v.lang)) ?? voices.find(v => /^zh/i.test(v.lang));
       if (selected) u.voice = selected;
       u.onstart = () => { if (turn === seq.current) { setSpeaking(true); setStatus(fallback ? '正在使用设备语音回退' : '正在用设备音色朗读'); } };
-      u.onend = () => { if (turn === seq.current) { setSpeaking(false); setStatus(fallback ? '已播完 · 设备语音回退' : '已播完 · 设备音色'); } };
-      u.onerror = e => { if (turn === seq.current) { setSpeaking(false); if (!['interrupted', 'canceled'].includes(e.error)) setError('设备声音暂时不可用，字幕已保留。'); } };
+      u.onend = () => { if (turn === seq.current) { setSpeaking(false); setStatus(fallback ? '已播完 · 设备语音回退' : '已播完 · 设备音色'); finish(); } };
+      u.onerror = e => { if (turn === seq.current) { setSpeaking(false); if (!['interrupted', 'canceled'].includes(e.error)) setError('设备声音暂时不可用，字幕已保留。'); finish(); } };
       utterance.current = u;
       try { setLoading(false); setSpeaking(true); window.speechSynthesis.speak(u); }
-      catch { setLoading(false); setSpeaking(false); setError('声音暂时不可用，可继续看字幕。'); }
+      catch { setLoading(false); setSpeaking(false); setError('声音暂时不可用，可继续看字幕。'); finish(); }
     };
-    if (voiceEngineFor(a) === 'device') { device(); return; }
+    if (voiceEngineFor(a) === 'device') { device(); return completed; }
     const choice = voiceFor(a);
     if (!serviceBase || !catalog || !choice || !validateServiceVoice(choice, catalog)) {
-      setError(a.serviceVoice ? '所选服务音色当前不可用，本次改用设备音色。' : '音色服务暂不可用，本次改用设备音色。'); device(true); return;
+      setError(a.serviceVoice ? '所选服务音色当前不可用，本次改用设备音色。' : '音色服务暂不可用，本次改用设备音色。'); device(true); return completed;
     }
     const provider = catalog.providers.find(p => p.id === choice.provider)!;
     const label = voicesForModel(provider, choice.model).find(v => v.id === choice.voice)?.name || choice.voice;
@@ -82,17 +86,18 @@ export function useSpeech() {
         clearTimeout(timer);
         if (turn !== seq.current) return;
         const ctx = context.current;
-        if (!ctx || ctx.state !== 'running') { setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); setStatus('声音等待点击启用'); return; }
+        if (!ctx || ctx.state !== 'running') { setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); setStatus('声音等待点击启用'); finish(); return; }
         const buffer = await ctx.decodeAudioData(audio);
         if (turn !== seq.current) return;
         const node = ctx.createBufferSource(); node.buffer = buffer; node.connect(ctx.destination); source.current = node;
-        node.onended = () => { node.disconnect(); if (turn === seq.current) { source.current = null; setSpeaking(false); setStatus(`已播完 · ${label}`); } };
+        node.onended = () => { node.disconnect(); if (turn === seq.current) { source.current = null; setSpeaking(false); setStatus(`已播完 · ${label}`); finish(); } };
         node.start(); setLoading(false); setSpeaking(true); setStatus(`正在朗读 · ${label}`);
       } catch {
         if (turn !== seq.current) return;
         setError('音色服务暂时不可用，本次改用设备语音；字幕已保留。'); device(true);
       } finally { clearTimeout(timer); if (request.current === controller) request.current = null; }
     })();
+    return completed;
   }, [available, voices, stop, unlock, voiceFor, catalog]);
   return { voices, speaking, loading, error, status, play, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
 }

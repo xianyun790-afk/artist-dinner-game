@@ -24,10 +24,13 @@ export interface Work {
   id: string; artistId: string; title: string; mark: Mark; paths: string[];
   createdAt: string; night: number; shared: boolean; disagreement: boolean;
 }
+export interface GroupMessage { id: string; who: 'player' | 'artist'; artistId?: string; text: string }
+export interface GroupChat { id: string; name: string; memberIds: string[]; messages: GroupMessage[] }
 export interface Save {
   version: 1; night: number; scene: 'dusk' | 'rain'; invited: string[];
   customArtists: Artist[]; people: Record<string, PersonState>; works: Work[];
   voiceSettings: Record<string, ArtistVoiceSettings>;
+  groupChats?: GroupChat[];
   muted: boolean; activeId: string | null; ended: boolean;
 }
 export interface Choice { id: string; text: string; hint?: string; icon?: 'art' | 'quiet' | 'talk' }

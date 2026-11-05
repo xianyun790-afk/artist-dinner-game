@@ -1,5 +1,5 @@
-import { freshSave } from './engine';
-import { artists } from './artists';
+import { freshSave } from './engine.ts';
+import { artists } from './artists.ts';
 import type { Save } from './types';
 const slot = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot')?.replace(/[^a-z0-9_-]/gi,'').slice(0,40) : '';
 const KEY = `afterglow-dinner-v1${slot?`-${slot}`:''}`;
@@ -17,6 +17,8 @@ export function loadSave(): { save: Save; error?: string } {
     if (s.customArtists.some(a=>!a || typeof a.id!=='string' || typeof a.name!=='string' || typeof a.greeting!=='string' || typeof a.image!=='string')) throw new Error('invalid custom artist');
     const ids=new Set([...artists,...s.customArtists].map(a=>a.id));
     if (s.invited.some(id=>!ids.has(id)) || new Set(s.invited).size!==s.invited.length) throw new Error('unknown guest');
+    // New optional group data never invalidates an otherwise readable old save.
+    s.groupChats = Array.isArray(s.groupChats) ? s.groupChats.filter(g => g && typeof g.id === 'string' && typeof g.name === 'string' && Array.isArray(g.memberIds) && g.memberIds.length >= 2 && g.memberIds.length <= 5 && new Set(g.memberIds).size === g.memberIds.length && g.memberIds.every(id => ids.has(id)) && Array.isArray(g.messages) && g.messages.every(m => m && typeof m.id === 'string' && typeof m.text === 'string' && (m.who === 'player' || m.who === 'artist' && g.memberIds.includes(m.artistId ?? '')))) : [];
     s.activeId = null; // Restore the room; conversation checkpoints remain intact.
     s.voiceSettings ??= {};
     return { save: s };
