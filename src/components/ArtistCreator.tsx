@@ -62,7 +62,7 @@ export function ArtistCreator({ onCreate, onPreview }: { onCreate: (artist: Arti
     <aside className="artist-look">
       <div className="custom-preview"><img src={portrait.image} alt="餐桌统一示例形象"/><span>餐桌形象 · 暂用统一示例</span><div>{artists.map(a => <button type="button" key={a.id} className={draft.avatar === a.id ? 'selected' : ''} onClick={() => change({ avatar: a.id })} aria-label={`选择${a.name}示例形象`} aria-pressed={draft.avatar === a.id}><img src={a.image} alt=""/></button>)}</div></div>
       <div className="portrait-reference">{draft.referenceImage ? <><img src={draft.referenceImage} alt="你上传的艺术家参考图"/><p>上传参考 · 不直接放上餐桌</p><button type="button" className="text-btn" onClick={() => { token.current++; setReading(false); setNotice('参考图已移除。'); setError(''); change({ referenceImage: '' }); }}>移除参考图</button></> : <p>可以上传照片或插画，作为以后统一形象的参考。</p>}</div>
-      <p className="form-note">形象生成服务尚未接通。示例形象和声音分别选择，照片不会被当作本人性格或声音。</p>
+      <p className="form-note">形象生成服务尚未接通。确认后可在来宾册设置声音。照片不会被当作本人性格或声音。</p>
     </aside>
     <div className="form-fields">
       <div className="artist-upload-actions">
@@ -80,7 +80,7 @@ export function ArtistCreator({ onCreate, onPreview }: { onCreate: (artist: Arti
       <label>第一句会说什么<textarea required maxLength={300} value={draft.observation} onChange={e => change({ observation: e.target.value })}/></label>
       <details className="artist-extra"><summary>补充资料与交流偏好</summary><label>导入的资料／来源<textarea maxLength={12000} value={draft.sourceNotes} placeholder="上传文字会放在这里。用户提供的资料尚未核验，不会自动成为真实代表作。" onChange={e => change({ sourceNotes: e.target.value })}/></label><label>交流中坚持的一点<input maxLength={300} value={draft.rule} onChange={e => change({ rule: e.target.value })}/></label></details>
       <p className="form-note">当前保存到这台设备，没有上传到外部服务。文字用于本地人设档案和预写对白；大模型回复、资料核验与新形象生成尚未接通。角色卡仅含文字与示例形象选择，不含参考图、声音或聊天记录。</p>
-      <div className="artist-create-actions"><button type="button" className="text-btn" onClick={download}><Download size={14}/>下载角色卡／示例</button><button type="button" className="text-btn" disabled={!draft.name.trim()} onClick={() => onPreview(draftToArtist(draft, 'preview'))}><Volume2 size={14}/>用设备音色试听</button><button type="submit" className="button" disabled={reading}>确认人设，加入来宾册</button></div>
+      <div className="artist-create-actions"><button type="button" className="text-btn" onClick={download}><Download size={14}/>下载角色卡／示例</button><button type="button" className="text-btn" disabled={!draft.name.trim()} onClick={() => onPreview(draftToArtist(draft, 'preview'))}><Volume2 size={14}/>试听当前声音</button><button type="submit" className="button" disabled={reading}>确认人设，加入来宾册</button></div>
     </div>
   </form>;
 }
