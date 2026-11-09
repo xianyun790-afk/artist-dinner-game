@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { declinesPaintingDisplay, findMentionedPainting, paintingFromPlayer, paintingFromReply, starryNight, waterLilies, type PaintingSceneState } from '../src/lib/paintings.ts';
+import { existsSync } from 'node:fs';
+import { declinesPaintingDisplay, findNamedPainting, findMentionedPainting, paintingFromPlayer, paintingFromReply, paintingCatalog, starryNight, waterLilies, persistenceOfMemory, blueGreenMusic, type PaintingSceneState } from '../src/lib/paintings.ts';
 
 test('named Starry Night mentions support Chinese aliases and English title formatting', () => {
   for (const text of ['聊聊《星月夜》', '星月夜为什么没有月亮？', '梵高的星夜', '我想看“星 月 夜”', 'Tell me about “THE   STARRY NIGHT”.', 'Starry Night']) {
@@ -30,6 +31,51 @@ test('Monet Water Lilies has its own real artwork and respects declined display'
   assert.equal(findMentionedPainting('我不喜欢睡莲的颜色'), waterLilies);
   assert.equal(findMentionedPainting('莫奈《睡莲池》'), null);
   assert.equal(findMentionedPainting('Bridge over a Pond of Water Lilies'), null);
+});
+
+test('Dalí and O’Keeffe titles select their own works across Chinese and English aliases', () => {
+  for (const text of ['达利《记忆的永恒》', '永恒的记忆', '达利的软钟', '达利软钟', 'The Persistence of Memory', 'PERSISTENCE   OF MEMORY']) {
+    assert.equal(findMentionedPainting(text), persistenceOfMemory, text);
+  }
+  for (const text of ['欧姬芙的蓝与绿的音乐', '《蓝和绿的音乐》', '蓝色与绿色的音乐', 'Blue and Green Music', 'BLUE   AND GREEN MUSIC']) {
+    assert.equal(findMentionedPainting(text), blueGreenMusic, text);
+  }
+  for (const text of ['钟表是什么时候发明的', '我梦见一个软钟', '我喜欢蓝色和绿色', '音乐让我想起海边', 'Blue and Green Musicals']) {
+    assert.equal(findMentionedPainting(text), null, text);
+  }
+});
+
+test('the new works respect display refusals without suppressing a negative art opinion', () => {
+  for (const text of ['先别展示记忆的永恒', '蓝与绿的音乐先不要展示', '不要给我看画作，聊聊蓝与绿的音乐']) {
+    assert.equal(declinesPaintingDisplay(text), true, text);
+    assert.equal(findMentionedPainting(text), null, text);
+  }
+  assert.equal(findMentionedPainting('我不喜欢记忆的永恒'), persistenceOfMemory);
+  assert.equal(findMentionedPainting('蓝与绿的音乐里为什么没有人？'), blueGreenMusic);
+  assert.equal(findNamedPainting('先别展示图片，只聊记忆的永恒'), persistenceOfMemory);
+});
+
+test('all four works use the last explicit title and preserve an existing scene during commentary', () => {
+  const works = [starryNight, waterLilies, persistenceOfMemory, blueGreenMusic];
+  for (const work of works) {
+    assert.equal(findMentionedPainting([...works.filter(other => other !== work), work].map(p => p.title).join('，')), work);
+  }
+  const scene: PaintingSceneState = { painting: persistenceOfMemory, suppressed: false };
+  assert.equal(paintingFromReply(scene, '蓝与绿的音乐有不同的节奏'), scene);
+  assert.equal(paintingFromPlayer(scene, '再看看蓝与绿的音乐').painting, blueGreenMusic);
+  const left: PaintingSceneState = { painting: null, suppressed: true };
+  assert.equal(paintingFromReply(left, '《记忆的永恒》的钟表……'), left);
+  assert.equal(paintingFromPlayer(left, '再聊聊记忆的永恒').painting, persistenceOfMemory);
+});
+
+test('every catalog entry has a unique identity, owned artwork metadata and a bundled image', () => {
+  assert.equal(new Set(paintingCatalog.map(p => p.id)).size, 4);
+  assert.equal(new Set(paintingCatalog.map(p => p.artistId)).size, 4);
+  for (const painting of paintingCatalog) {
+    assert.ok(painting.aliases.includes(painting.title), painting.id);
+    assert.ok(existsSync(new URL(`../public${painting.image}`, import.meta.url)), painting.image);
+    assert.equal(new URL(painting.sourceUrl).protocol, 'https:');
+  }
 });
 
 test('players can switch paintings by the last named work while commentary keeps the current scene', () => {

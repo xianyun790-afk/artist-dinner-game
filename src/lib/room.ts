@@ -1,4 +1,5 @@
 import type {Artist} from './types';
+import {findMentionedPainting,findNamedPainting} from './paintings.ts';
 export const topicFor=(a:Artist)=>a.id==='monet'?'光影':a.id==='vincent'?'色彩':a.id==='dali'?'梦境':a.id==='georgia'?'日常':'灵感';
 const themes:Record<string,RegExp>={
   monet:/光影|阳光|日落|夕阳|影子|风景|睡莲|water\s+lilies|nymph[eé]as|花园|光线|倒影/i,
@@ -11,6 +12,8 @@ export function responderFor(text:string,guests:Artist[],preferredId:string|null
   const named=guests.find(a=>[a.name,a.fullName,a.english,...(a.id==='georgia'?['欧姬弗','奥姬芙']:[])].some(name=>name&&text.toLowerCase().includes(name.toLowerCase())));
   if(named)return named;
   if(preferredId){const picked=guests.find(a=>a.id===preferredId);if(picked)return picked;}
+  const painting=findNamedPainting(text);
+  if(painting){const owner=guests.find(a=>a.id===painting.artistId);if(owner)return owner;}
   const themed=guests.find(a=>themes[a.id]?.test(text));if(themed)return themed;
   // An unaddressed follow-up continues the last speaker; no setup is required.
   return guests.find(a=>a.id===previousId)??guests.find(a=>a.id==='georgia')??guests[0];
@@ -18,6 +21,9 @@ export function responderFor(text:string,guests:Artist[],preferredId:string|null
 export function roomReply(a:Artist,text:string):string|null{
   if(/不想|不要|别|不愿/.test(text))return null;
   if(/你好|晚上好|嗨|哈喽/.test(text))return a.greeting;
+  const painting=findMentionedPainting(text);
+  if(a.id==='dali'&&painting?.id==='persistence-of-memory')return '那些软下来的钟，还留着表盘。一个原本用来计量时间的东西，忽然没了硬骨头。这个小麻烦，我很喜欢。';
+  if(a.id==='georgia'&&painting?.id==='blue-green-music')return '我会看蓝和绿相接的边缘，还有形状弯过去的地方。目光能顺着它们走一会儿，先不急着给每个形状取名字。';
   if(a.id==='monet'&&themes.monet.test(text)){
     if(/睡莲|water\s+lilies|nymph[eé]as/i.test(text))return '我更在意睡莲之间那些空出来的水面。花、倒影和水下的暗处，要放在一起看。';
     if(/日落|夕阳/.test(text))return '日落最有意思的，是你刚想记住它，它已经换了一种颜色。我常常来不及，只好明天再等。';

@@ -31,3 +31,39 @@ test('a boundary is not replaced with an enthusiastic topical reply',()=>{
   assert.equal(roomReply(guests[2],'我不想说这个梦'),null);
   assert.ok(roomReply(guests[0],'日落')?.includes('明天'));
 });
+test('named paintings route to their present owner before broad color themes',()=>{
+  for(const title of ['记忆的永恒','永恒的记忆','THE   PERSISTENCE OF MEMORY']){
+    assert.equal(responderFor(title,guests,null,'monet')?.id,'dali',title);
+  }
+  for(const title of ['蓝与绿的音乐','蓝色与绿色的音乐','Blue and Green Music']){
+    assert.equal(responderFor(title,guests,null,'vincent')?.id,'georgia',title);
+  }
+  assert.equal(responderFor('星月夜和蓝与绿的音乐',guests,null,null)?.id,'georgia');
+});
+test('direct address and selected seat still override a painting owner',()=>{
+  assert.equal(responderFor('莫奈，你怎么看记忆的永恒',guests,'georgia',null)?.id,'monet');
+  assert.equal(responderFor('蓝与绿的音乐',guests,'dali',null)?.id,'dali');
+  assert.equal(responderFor('欧姬芙，你怎么看星月夜',guests,'monet',null)?.id,'georgia');
+});
+test('declining the image still routes the textual discussion to its artist',()=>{
+  assert.equal(responderFor('先别展示图片，只聊记忆的永恒，一句话。',guests,null,'georgia')?.id,'dali');
+  assert.equal(responderFor('不用展示蓝色与绿色的音乐，只聊聊它。',guests,null,'dali')?.id,'georgia');
+  assert.equal(responderFor('先别展示图片，只聊记忆的永恒。',guests,'monet','georgia')?.id,'monet');
+});
+test('an absent painting owner is never inserted into the table',()=>{
+  const custom={...artists[4],id:'custom-paper',name:'纸灯',fullName:'纸灯',english:'Paper Lantern'};
+  const onlyMonet=[guests[0]];
+  assert.equal(responderFor('记忆的永恒',onlyMonet,'dali','dali')?.id,'monet');
+  assert.equal(responderFor('蓝与绿的音乐',[custom],null,'georgia')?.id,custom.id);
+  assert.equal(roomReply(custom,'蓝与绿的音乐'),null);
+  assert.equal(responderFor('蓝与绿的音乐',[],null,null),undefined);
+});
+test('new artwork replies keep their own voice and leave ordinary topics unchanged',()=>{
+  assert.match(roomReply(guests[2],'聊聊记忆的永恒')??'',/软下来的钟/);
+  assert.match(roomReply(guests[3],'Blue and Green Music')??'',/蓝和绿相接的边缘/);
+  assert.equal(roomReply(guests[3],'记忆的永恒'),null);
+  assert.equal(roomReply(guests[2],'不要聊记忆的永恒'),null);
+  assert.equal(responderFor('喜欢蓝色',guests,null,null)?.id,'vincent');
+  assert.equal(responderFor('这个时钟真奇怪',guests,null,null)?.id,'dali');
+  assert.doesNotMatch(roomReply(guests[2],'这个时钟真奇怪')??'',/软下来的钟/);
+});

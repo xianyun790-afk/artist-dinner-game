@@ -1,5 +1,9 @@
+import catalog from './paintingCatalog.json' with { type: 'json' };
 export interface Painting {
   id: string;
+  artistId: string;
+  aliases: string[];
+  note: string;
   title: string;
   englishTitle: string;
   artist: string;
@@ -10,31 +14,24 @@ export interface Painting {
   imageSourceUrl: string;
 }
 
-export const starryNight: Painting = {
-  id: 'starry-night',
-  title: '星月夜',
-  englishTitle: 'The Starry Night',
-  artist: '文森特·梵高',
-  year: '1889',
-  image: '/artworks/starry-night.jpg',
-  museum: '纽约现代艺术博物馆（MoMA）',
-  sourceUrl: 'https://www.moma.org/collection/works/79802',
-  imageSourceUrl: 'https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
-};
+export const paintingCatalog: Painting[] = catalog;
+export const starryNight = paintingCatalog.find(p => p.id === 'starry-night')!;
+export const waterLilies = paintingCatalog.find(p => p.id === 'water-lilies')!;
+export const persistenceOfMemory = paintingCatalog.find(p => p.id === 'persistence-of-memory')!;
+export const blueGreenMusic = paintingCatalog.find(p => p.id === 'blue-green-music')!;
 
-export const waterLilies: Painting = {
-  id: 'water-lilies',
-  title: '睡莲',
-  englishTitle: 'Water Lilies',
-  artist: '克洛德·莫奈',
-  year: '1906',
-  image: '/artworks/water-lilies.jpg',
-  museum: '芝加哥艺术博物馆',
-  sourceUrl: 'https://www.artic.edu/artworks/16568/water-lilies',
-  imageSourceUrl: 'https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Water_Lilies_-_1933.1157_-_Art_Institute_of_Chicago.jpg',
-};
-
-const paintingTitle = /星月夜|星夜|\b(?:the\s+)?starry\s+night\b|睡莲|\bwater\s+lilies\b|\bnymph[eé]as\b/giu;
+function aliasPattern(alias: string): string {
+  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ +/g, '\\s+');
+  return /^[a-z]/i.test(alias) ? `\\b${escaped}\\b` : escaped;
+}
+const titlePatterns = paintingCatalog.map(painting => ({
+  painting,
+  pattern: new RegExp([...painting.aliases].sort((a, b) => b.length - a.length).map(aliasPattern).join('|'), 'giu'),
+}));
+function titleMentions(text: string) {
+  return titlePatterns.flatMap(({ painting, pattern }) => [...text.matchAll(pattern)].map(match => ({ painting, match })))
+    .sort((a, b) => a.match.index! - b.match.index!);
+}
 
 function normalizeMention(text: string): string {
   return text.normalize('NFKC')
@@ -61,7 +58,7 @@ export function declinesPaintingDisplay(text: string): boolean {
     const declinePictureAfter = /(?:图片|画面|画作|原作|配图|插图|弹窗|这幅画|这张画|那幅画|那张画)(?:先|暂时|现在)?(?:不要|不用|不必|无需|别|不需要)(?:你|再|先|自动|直接|给我|帮我|\s){0,3}(?:展示|显示|弹出|打开|放出|放大|看)/u.test(clause);
     const declinePopup = /(?:不要|不用|不必|无需|先别|别|不想|不需要)(?:你|再|先|自动|直接|给我|帮我|\s){0,3}(?:弹窗|配图)/u.test(clause);
     if (declinePicture || declinePictureAfter || declinePopup) return true;
-    for (const mention of clause.matchAll(paintingTitle)) {
+    for (const { match: mention } of titleMentions(clause)) {
       const before = clause.slice(0, mention.index).slice(-30);
       const after = clause.slice(mention.index! + mention[0].length, mention.index! + mention[0].length + 30);
       // Respect a request not to show a picture, without censoring disagreement
@@ -75,11 +72,13 @@ export function declinesPaintingDisplay(text: string): boolean {
 }
 
 /** Match a named work, rather than guessing from a general topic such as stars. */
+export function findNamedPainting(text: string): Painting | null {
+  return titleMentions(relevantText(text)).at(-1)?.painting ?? null;
+}
+
+/** A player can discuss a named work while declining its image. */
 export function findMentionedPainting(text: string): Painting | null {
-  if (declinesPaintingDisplay(text)) return null;
-  const mention = [...relevantText(text).matchAll(paintingTitle)].at(-1);
-  if (!mention) return null;
-  return /睡莲|water\s+lilies|nymph[eé]as/iu.test(mention[0]) ? waterLilies : starryNight;
+  return declinesPaintingDisplay(text) ? null : findNamedPainting(text);
 }
 
 export interface PaintingSceneState { painting: Painting | null; suppressed: boolean }
