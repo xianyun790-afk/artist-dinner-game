@@ -18,14 +18,19 @@ import { VoiceControls } from '@/components/VoiceControls';
 import { Artwork } from '@/components/Artwork';
 import { Activity } from '@/components/Activity';
 import { detectKeyword, keywordInfo, type Keyword } from '@/lib/keywords';
+import { declinesPaintingDisplay, findMentionedPainting, type Painting } from '@/lib/paintings';
+import { PaintingView } from '@/components/Painting';
 
-type Panel='activity'|'guests'|'addArtist'|'groups'|'works'|'settings'|'memory'|'end'|null;
+type Panel='activity'|'guests'|'addArtist'|'groups'|'works'|'settings'|'memory'|'end'|'painting'|null;
 export default function App(){
   const initial=useRef<ReturnType<typeof loadSave>|null>(null);if(!initial.current)initial.current=loadSave();
   const [save,setSave]=useState<Save>(initial.current.save);const [panel,setPanel]=useState<Panel>(null);const [toast,setToast]=useState(initial.current.error??'');const [saved,setSaved]=useState(true);const [voiceArtist,setVoiceArtist]=useState('vincent');const [confirmForget,setConfirmForget]=useState<string|null>(null);
   const [suggestion,setSuggestion]=useState<Keyword|null>(null);
   const [preferred,setPreferred]=useState<string|null>(null);
   const [reply,setReply]=useState<{artistId:string;text:string;thinking:boolean}|null>(null);
+  const [painting,setPainting]=useState<Painting|null>(null);const paintingBlocked=useRef(false);
+  const noticePainting=(text:string)=>{if(paintingBlocked.current)return;const found=findMentionedPainting(text);if(found)setPainting(found);};
+  const dismissPainting=()=>{paintingBlocked.current=true;setPainting(null);};
   const [activeGroupId,setActiveGroupId]=useState<string|null>(null);
   const [groupRunning,setGroupRunning]=useState(false);const groupRequest=useRef<AbortController|null>(null);const dialogueRequest=useRef<AbortController|null>(null);
   const [pending,setPending]=useState(false);const previousSpeaker=useRef<string|null>(null);
@@ -38,9 +43,10 @@ export default function App(){
   const last=person?.messages.filter(m=>m.who==='artist').at(-1);
   const stopConversation=useCallback(()=>{groupRequest.current?.abort();groupRequest.current=null;dialogueRequest.current?.abort();dialogueRequest.current=null;setGroupRunning(false);setPending(false);setReply(r=>r?.thinking?null:r);speechRef.current.stop();},[]);
   useEffect(()=>()=>{groupRequest.current?.abort();dialogueRequest.current?.abort();},[]);
-  useEffect(()=>{if(panel)stopConversation();},[panel,stopConversation]);
+  useEffect(()=>{if(panel&&panel!=='painting')stopConversation();},[panel,stopConversation]);
   useEffect(()=>{const quiet=()=>{if(document.hidden)stopConversation();};document.addEventListener('visibilitychange',quiet);return()=>document.removeEventListener('visibilitychange',quiet);},[stopConversation]);
   const closePanel=useCallback(()=>{setPanel(null);setConfirmForget(null);speechRef.current.stop();},[]);
+  const closePainting=useCallback(()=>setPanel(null),[]);
   useEffect(()=>{const ok=writeSave(save);setSaved(ok);},[save]);
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4500);return()=>clearTimeout(t);},[toast]);
   useEffect(()=>{if(saved)return;const handler=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[saved]);
@@ -52,7 +58,8 @@ export default function App(){
   const voiceTarget=catalog.find(a=>a.id===voiceArtist)??catalog[0];
   const updateVoice=(values:Partial<ArtistVoiceSettings>)=>setSave(s=>({...s,voiceSettings:{...s.voiceSettings,[voiceTarget.id]:{rate:voiceTarget.rate,pitch:voiceTarget.pitch,voiceURI:voiceTarget.voiceURI,voiceEngine:voiceTarget.voiceEngine,serviceVoice:voiceTarget.serviceVoice,...values}}}));
   const send=(text:string)=>{
-    const input=text.trim();if(!input||panel)return;
+    const input=text.trim();if(!input||panel||pending&&!activeGroup)return;
+    paintingBlocked.current=declinesPaintingDisplay(input);setPainting(findMentionedPainting(input));
     if(activeGroup){
       stopConversation();speech.unlock();setSuggestion(null);
       const members=groupMembers(activeGroup.memberIds,catalog);
@@ -68,10 +75,10 @@ export default function App(){
         generate:async(r,signal)=>{
           const voice=speechRef.current.startStream(r.artist,signal);voiceCompletion=voice.done;let partial='';
           try{return {...r,text:await dialogueRef.current.reply(r.artist,input,roundHistory,'group',r.text,signal,sentence=>{
-            partial+=sentence;voice.push(sentence);setReply({artistId:r.artist.id,text:partial,thinking:false});
+            partial+=sentence;voice.push(sentence);noticePainting(partial);setReply({artistId:r.artist.id,text:partial,thinking:false});
           })};}finally{voice.end();}
         },
-        present:r=>{roundHistory.push({who:'artist',name:r.artist.name,text:r.text});setReply({artistId:r.artist.id,text:r.text,thinking:false});setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'artist',artistId:r.artist.id,text:r.text}));},
+        present:r=>{roundHistory.push({who:'artist',name:r.artist.name,text:r.text});noticePainting(r.text);setReply({artistId:r.artist.id,text:r.text,thinking:false});setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'artist',artistId:r.artist.id,text:r.text}));},
         speak:()=>voiceCompletion,pause:groupPause,
       }).catch(()=>{/* User interruption discards this round. */}).finally(()=>{if(groupRequest.current===controller){groupRequest.current=null;setGroupRunning(false);}});
       return;
@@ -90,27 +97,28 @@ export default function App(){
       const voice=speechRef.current.startStream(a,controller.signal);let partial='';
       let line=authored;
       try {line=await dialogueRef.current.reply(a,input,(save.people[a.id]?.messages??[]).map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':a.name})),'private',authored,controller.signal,sentence=>{
-        partial+=sentence;voice.push(sentence);setReply({artistId:a.id,text:partial,thinking:false});
+        partial+=sentence;voice.push(sentence);noticePainting(partial);setReply({artistId:a.id,text:partial,thinking:false});
       });}
       catch {return;}
       finally{voice.end();}
       if(controller.signal.aborted||dialogueRequest.current!==controller)return;
       dialogueRequest.current=null;
       const lastReply=p.messages.filter(m=>m.who==='artist').at(-1);if(lastReply)lastReply.text=line;
-      setSave(result);setReply({artistId:a.id,text:line,thinking:false});setPending(false);
+      setSave(result);noticePainting(line);setReply({artistId:a.id,text:line,thinking:false});setPending(false);
       const key=detectKeyword(input);
       if((key==='invite'&&/邀请|来宾册|换.*人设/.test(input))||(key==='settings'&&/设置|音色/.test(input)))setSuggestion(key);
     })();
   };
   const confirmSuggestion=()=>{const key=suggestion;setSuggestion(null);if(key==='art')beginArt();else if(key==='works')setPanel('works');else if(key==='invite')setPanel('guests');else if(key==='settings')setPanel('settings');else if(key==='memory')setPanel('memory');else if(key==='end')setPanel('end');};
   return <div className="app-shell fullscreen-dinner">
-    <main className="main-content"><section className="stage-shell room-stage" aria-label="艺术家晚宴场景" data-first-audio-ms={speech.firstAudioMs??undefined} data-voice-status={speech.status}><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply}/></div></div>
+    <main className="main-content"><section className="stage-shell room-stage" aria-label="艺术家晚宴场景" data-first-audio-ms={speech.firstAudioMs??undefined} data-voice-status={speech.status}><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply} painting={painting} onOpenPainting={()=>setPanel('painting')} onDismissPainting={dismissPainting}/></div></div>
       <button className="room-add-artist" aria-label="添加艺术家" title="添加艺术家" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('addArtist');}}><UserRoundPlus size={21} strokeWidth={1.5}/></button>
       <button className="room-add-artist room-group-button" aria-label="发起群聊" title="发起群聊" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('groups');}}><UsersRound size={21} strokeWidth={1.5}/></button>
       {activeGroup&&<div className="room-group-status"><button onClick={()=>{stopConversation();setPanel('groups');}} aria-label="查看当前群聊"><UsersRound size={13}/><span>{activeGroup.name}</span></button><button aria-label="离开群聊" title="离开群聊" onClick={()=>{stopConversation();setActiveGroupId(null);setPreferred(null);setReply(null);}}><X size={14}/></button></div>}
       <RoomInput onSend={send} busy={pending||!!panel} speaking={speech.speaking} loading={speech.loading} onUnlock={speech.unlock} onStop={stopConversation} responding={groupRunning||pending} speechError={speech.error||dialogue.error}/>
       {suggestion&&<aside className="keyword-popup room-suggestion" aria-label="对话中的小提议" role="status"><button className="keyword-dismiss icon-btn" aria-label="关闭小提议" onClick={()=>setSuggestion(null)}><X size={14}/></button><p>{keywordInfo[suggestion].title}</p><button className="keyword-action" onClick={confirmSuggestion}>{keywordInfo[suggestion].action}<ArrowRight size={14}/></button></aside>}
     </section></main>
+    {panel==='painting'&&painting&&<Modal title={`《${painting.title}》`} subtitle={`${painting.artist} · ${painting.year} · ${painting.museum}`} onClose={closePainting} wide><PaintingView key={painting.id} painting={painting}/></Modal>}
     {panel==='activity'&&active&&person&&<Modal title={`和${active.name}一起画一会儿`} onClose={closePanel}><Activity artist={active} person={person} onChoose={id=>setSave(s=>choose(s,active,id))} onMark={(mark,paths)=>setSave(s=>makeMark(s,active,mark,paths))} onSave={title=>setSave(s=>saveWork(s,active,title))}/></Modal>}
     {(panel==='guests'||panel==='addArtist')&&<Modal title="给喜欢的人，一张请柬。" subtitle="选人、换座位，或邀请一位只属于你的艺术家。" onClose={closePanel} wide><GuestBook initialCreating={panel==='addArtist'} onVoiceSettings={()=>{speech.stop();setPanel('settings');}} catalog={catalog} save={save} onToggle={toggleGuest} onReorder={reorder} onCreate={createArtist} onPreview={a=>speech.play(a.greeting,a)} onClose={closePanel}/>{speech.error&&<p className="inline-notice">{speech.error}</p>}</Modal>}
     {panel==='works'&&<Modal title="这一晚，我们留下的。" subtitle="每一笔都有来处，意见不同的版本也值得收好。" onClose={closePanel} wide>{save.works.length?<div className="works-grid">{[...save.works].reverse().map(w=>{const a=catalog.find(a=>a.id===w.artistId)??artists[0];return <article className="work-card" key={w.id}><Artwork artist={a} mark={w.mark} paths={w.paths}/><div className="work-meta"><small>第{w.night}夜 · {w.disagreement?'保留不同意见':'共同试稿'}</small><h3>{w.title}</h3><p>你 × {a.name} <span>{w.shared?'已展示到餐桌':'仅你们两人可见'}</span></p><div className="work-actions"><button className="text-btn" onClick={()=>{setSave(s=>({...s,works:s.works.map(x=>x.id===w.id?{...x,shared:!x.shared}:x)}));setToast(w.shared?'作品已收回私有作品夹。已经看过的人不会因此失忆。':'只展示这张作品，私聊与争执没有公开。');}}>{w.shared?'收回作品夹':'摆到桌上'}</button><button className="text-btn" onClick={()=>{const link=document.createElement('a');const svg=document.querySelector(`[data-work="${w.id}"] svg`);if(svg){link.href=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)],{type:'image/svg+xml'}));link.download=`${w.title}.svg`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);}}}><ArrowDownToLine size={13}/>下载</button></div></div><div data-work={w.id} hidden><Artwork artist={a} mark={w.mark} paths={w.paths}/></div></article>;})}</div>:<div className="empty-state"><Palette size={35} strokeWidth={1}/><h3>还没有一张画，也没关系。</h3><p>靠近任何一位来宾，问问“要不要一起画点什么”。</p><button className="button" onClick={()=>{closePanel();beginArt();}}>试着接下一笔 <ArrowRight size={15}/></button></div>}<div className="modal-bottom"><span>作品保存在这台设备的浏览器中</span><button className="text-btn" onClick={()=>exportSave(save)}><Download size={14}/>导出完整存档</button></div></Modal>}

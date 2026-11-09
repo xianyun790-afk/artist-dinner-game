@@ -2,7 +2,7 @@ import type {Artist} from './types';
 export const topicFor=(a:Artist)=>a.id==='monet'?'光影':a.id==='vincent'?'色彩':a.id==='dali'?'梦境':a.id==='georgia'?'日常':'灵感';
 const themes:Record<string,RegExp>={
   monet:/光影|阳光|日落|夕阳|影子|风景|睡莲|花园|光线|倒影/,
-  vincent:/色彩|颜色|黄色|蓝色|红色|向日葵|星空|画笔|笔触/,
+  vincent:/色彩|颜色|黄色|蓝色|红色|向日葵|星空|星月夜|星夜|starry\s+night|画笔|笔触/i,
   dali:/梦境|做梦|梦见|梦到|奇怪|荒诞|超现实|时钟|想象|梦/,
   georgia:/日常|生活|今天|吃|面包|水果|梨|累|难过|开心|心情|烦|焦虑/,
 };
@@ -23,6 +23,7 @@ export function roomReply(a:Artist,text:string):string|null{
     return '我会先看光落在哪里。同一块白色，在不同光线里会变。我倒愿意多看一会儿。';
   }
   if(a.id==='vincent'&&themes.vincent.test(text)){
+    if(/星月夜|星夜|starry\s+night/i.test(text))return '《星月夜》里，蓝色的天空和明亮的星星拉着彼此。我想留下天空转动的感觉。';
     if(/蓝色/.test(text))return '我会想试试蓝旁边放一点黄。两种颜色挨着时，和单独看不太一样。';
     if(/黄色|向日葵/.test(text))return '我偏爱有力的黄。可只看黄还不够，旁边放什么颜色，也得一起看。';
     return '我在意两种颜色挨着时发生了什么。有时只改旁边那一小块，感觉就完全变了。';
