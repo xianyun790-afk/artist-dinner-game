@@ -64,3 +64,17 @@ export function findMentionedPainting(text: string): Painting | null {
   if (declinesPaintingDisplay(text)) return null;
   return /星月夜|星夜|\b(?:the\s+)?starry\s+night\b/iu.test(relevantText(text)) ? starryNight : null;
 }
+
+export interface PaintingSceneState { painting: Painting | null; suppressed: boolean }
+export function paintingFromPlayer(state: PaintingSceneState, text: string): PaintingSceneState {
+  if (declinesPaintingDisplay(text)) return { painting: null, suppressed: true };
+  const painting = findMentionedPainting(text);
+  // Ordinary follow-ups stay in the painting. Only an explicit new mention
+  // can invite the player back after they have chosen to leave it.
+  return painting ? { painting, suppressed: false } : state;
+}
+export function paintingFromReply(state: PaintingSceneState, text: string): PaintingSceneState {
+  if (state.suppressed || state.painting) return state;
+  const painting = findMentionedPainting(text);
+  return painting ? { painting, suppressed: false } : state;
+}

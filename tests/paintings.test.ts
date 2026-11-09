@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { declinesPaintingDisplay, findMentionedPainting, starryNight } from '../src/lib/paintings.ts';
+import { declinesPaintingDisplay, findMentionedPainting, paintingFromPlayer, paintingFromReply, starryNight, type PaintingSceneState } from '../src/lib/paintings.ts';
 
 test('named Starry Night mentions support Chinese aliases and English title formatting', () => {
   for (const text of ['聊聊《星月夜》', '星月夜为什么没有月亮？', '梵高的星夜', '我想看“星 月 夜”', 'Tell me about “THE   STARRY NIGHT”.', 'Starry Night']) {
@@ -8,6 +8,26 @@ test('named Starry Night mentions support Chinese aliases and English title form
   }
   assert.equal(starryNight.image, '/artworks/starry-night.jpg');
   assert.equal(starryNight.sourceUrl, 'https://www.moma.org/collection/works/79802');
+});
+
+test('entering the painting is automatic and ordinary follow-ups keep the scene', () => {
+  const table: PaintingSceneState = { painting: null, suppressed: false };
+  const scene = paintingFromPlayer(table, '聊聊星月夜');
+  assert.equal(scene.painting, starryNight);
+  assert.equal(paintingFromPlayer(scene, '那棵柏树呢？'), scene);
+  assert.equal(paintingFromReply(scene, '星月夜里的柏树'), scene);
+  assert.equal(paintingFromReply(table, '我们说到《星月夜》').painting, starryNight);
+});
+
+test('leaving suppresses late speech and ordinary follow-ups until a new explicit invitation', () => {
+  const left: PaintingSceneState = { painting: null, suppressed: true };
+  assert.equal(paintingFromReply(left, '《星月夜》的天空……'), left);
+  assert.equal(paintingFromPlayer(left, '然后呢？'), left);
+  assert.equal(paintingFromReply(paintingFromPlayer(left, '然后呢？'), '星月夜是……'), left);
+  assert.equal(paintingFromPlayer(left, '再看看星月夜').painting, starryNight);
+  const declined = paintingFromPlayer({ painting: starryNight, suppressed: false }, '先别展示图片，只聊星月夜');
+  assert.equal(declined.painting, null);
+  assert.equal(paintingFromReply(declined, '星月夜'), declined);
 });
 
 test('general stars and non-artwork uses do not select a painting', () => {
