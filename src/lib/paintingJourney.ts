@@ -26,7 +26,7 @@ const defaultTimers: JourneyTimers = {
   clear: timer => clearTimeout(timer as ReturnType<typeof setTimeout>),
 };
 
-/** A single encounter owns every delayed transition, including image loading. */
+/** Explicit exit owns the framing animation; speech completion only caches text. */
 export function createPaintingJourney(options: {
   onState?: (state: PaintingJourneyState) => void;
   onArchive: (memory: PaintingMemory) => void;
@@ -35,38 +35,25 @@ export function createPaintingJourney(options: {
 }) {
   let state = initialPaintingJourney();
   let revision = 0;
-  let pending: PaintingMemory | null = null;
+  let progress: PaintingExplanation | null = null;
   let disposed = false;
   const loaded = new Set<string>(), failed = new Set<string>();
   const timers = options.timers ?? defaultTimers, scheduled = new Set<unknown>();
   const publish = () => options.onState?.(state);
-  const clear = () => { revision++; for (const timer of scheduled) timers.clear(timer); scheduled.clear(); pending = null; };
-  const current = (token: string, version: number) => !disposed && state.token === token && revision === version;
-  const later = (callback: () => void, delay: number, token: string, version: number) => {
-    const timer = timers.set(() => { scheduled.delete(timer); if (current(token, version)) callback(); }, delay);
+  const clear = () => { revision++; for (const timer of scheduled) timers.clear(timer); scheduled.clear(); progress = null; };
+  const current = (version: number) => !disposed && revision === version;
+  const later = (callback: () => void, delay: number, version: number) => {
+    const timer = timers.set(() => { scheduled.delete(timer); if (current(version)) callback(); }, delay);
     scheduled.add(timer);
   };
   const close = () => {
     clear(); state = { painting: null, suppressed: true, phase: 'viewing', token: null, finishing: false }; publish();
   };
-  const startFinish = () => {
-    if (!pending || !state.painting || !state.token || state.phase !== 'viewing' || !loaded.has(state.painting.id) || failed.has(state.painting.id)) return;
-    // Only one hold can be scheduled even if a cached image emits another load.
-    if (scheduled.size) return;
-    const token = state.token, version = revision, memory = pending;
-    later(() => {
-      state = { ...state, phase: 'framing' }; publish();
-      later(() => {
-        // Consume before notifying the caller, so a reentrant callback cannot
-        // archive this encounter for a second time.
-        pending = null;
-        state = { ...state, phase: 'filing' };
-        options.onArchive(memory);
-        if (!current(token, version)) return;
-        publish();
-        later(close, PAINTING_JOURNEY_TIMING.file, token, version);
-      }, PAINTING_JOURNEY_TIMING.frame, token, version);
-    }, PAINTING_JOURNEY_TIMING.hold, token, version);
+  const capture = (token: string, explanation: PaintingExplanation) => {
+    // The first reply can introduce the painting after its metadata was captured.
+    if (disposed || !token || token !== state.token || state.phase !== 'viewing') return;
+    if (!explanation.speakerId.trim() || !explanation.question.trim() || typeof explanation.explanation !== 'string' || !Number.isSafeInteger(explanation.night) || explanation.night < 1) return;
+    progress = { ...explanation };
   };
   return {
     get state() { return state; },
@@ -81,26 +68,45 @@ export function createPaintingJourney(options: {
       if (next.painting === state.painting && next.suppressed === state.suppressed) return;
       state = { ...state, painting: next.painting, suppressed: next.suppressed }; publish();
     },
+    capture,
     finish(token: string, explanation: PaintingExplanation, completed: boolean) {
-      if (disposed || !token || token !== state.token || state.phase !== 'viewing' || pending || !completed || !state.painting || state.suppressed || failed.has(state.painting.id)) return;
-      if (!explanation.speakerId.trim() || !explanation.question.trim() || !explanation.explanation.trim() || !Number.isSafeInteger(explanation.night) || explanation.night < 1) return;
-      pending = { id: token, paintingId: state.painting.id, ...explanation, createdAt: (options.now?.() ?? new Date()).toISOString() };
-      state = { ...state, finishing: true }; publish();
-      startFinish();
+      // Completion does not frame, archive, or block another spoken follow-up.
+      if (completed) capture(token, explanation);
+    },
+    exit() {
+      if (disposed || !state.painting || state.finishing || !['viewing', 'replay'].includes(state.phase)) return;
+      const painting = state.painting;
+      if (failed.has(painting.id)) { close(); return; }
+      const memory: PaintingMemory | null = state.phase === 'viewing' && state.token && progress && !state.suppressed
+        ? { id: state.token, paintingId: painting.id, ...progress, createdAt: (options.now?.() ?? new Date()).toISOString() }
+        : null;
+      // Freeze the snapshot before publishing; late audio/model events are inert.
+      clear(); const version = revision;
+      state = { ...state, phase: 'framing', finishing: true }; publish();
+      later(() => {
+        if (!loaded.has(painting.id) || failed.has(painting.id) || !memory) { close(); return; }
+        state = { ...state, phase: 'filing' };
+        options.onArchive(memory);
+        if (!current(version)) return;
+        publish();
+        later(close, PAINTING_JOURNEY_TIMING.file, version);
+      }, PAINTING_JOURNEY_TIMING.frame, version);
     },
     cancel() {
       if (disposed) return;
+      if (state.finishing) { close(); return; }
       clear(); state = { ...state, token: null, finishing: false, phase: state.phase === 'replay' ? 'replay' : 'viewing' }; publish();
     },
     leave() { if (!disposed) close(); },
     loaded(paintingId: string) {
       if (disposed || state.painting?.id !== paintingId) return;
-      failed.delete(paintingId); loaded.add(paintingId); startFinish();
+      failed.delete(paintingId); loaded.add(paintingId);
     },
     failed(paintingId: string) {
       if (disposed || state.painting?.id !== paintingId) return;
-      failed.add(paintingId); loaded.delete(paintingId); clear();
-      state = { ...state, finishing: false, phase: state.phase === 'replay' ? 'replay' : 'viewing' }; publish();
+      failed.add(paintingId); loaded.delete(paintingId);
+      if (state.finishing) { close(); return; }
+      clear(); state = { ...state, finishing: false }; publish();
     },
     replay(painting: Painting) {
       if (disposed) return;

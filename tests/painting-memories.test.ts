@@ -38,13 +38,25 @@ test('records derive artwork from the local catalog and distinguish the speaker 
   assert.equal(recordPaintingMemory(save, { ...memory(), speakerId: 'lin' }).paintingMemories?.[0].paintingId, 'starry-night');
 });
 
+test('a view-only memory keeps an empty explanation without inventing dialogue', () => {
+  const viewOnly = { ...memory(), explanation: '' };
+  const recorded = recordPaintingMemory(freshSave(), viewOnly);
+  assert.deepEqual(recorded.paintingMemories, [viewOnly]);
+  assert.deepEqual(sanitizePaintingMemories([{ ...viewOnly, explanation: '  \n  ' }], speakers), [viewOnly]);
+  assert.equal(recordPaintingMemory(recorded, { ...memory(), explanation: '尚未播放的台词' }), recorded);
+  const { explanation: _explanation, ...missingExplanation } = memory();
+  for (const invalid of [missingExplanation, { ...memory(), explanation: undefined }, { ...memory(), explanation: null }]) {
+    assert.deepEqual(sanitizePaintingMemories([invalid], speakers), []);
+  }
+});
+
 test('malformed entries are discarded and valid entries keep only bounded canonical fields', () => {
   const valid = { ...memory(), question: '  看看星月夜  ', explanation: '  颜色挨在一起很有力。  ', injected: true };
   const invalid = [null, [], 'not a record', {},
     { ...memory(), id: '' }, { ...memory(), id: 'x'.repeat(101) },
     { ...memory(), paintingId: 'https://attacker.invalid/image.jpg' },
     { ...memory(), speakerId: 'unknown' }, { ...memory(), question: 'x'.repeat(401) },
-    { ...memory(), explanation: 'x'.repeat(4001) }, { ...memory(), explanation: '  ' },
+    { ...memory(), explanation: 'x'.repeat(4001) }, { ...memory(), explanation: null },
     { ...memory(), createdAt: 'yesterday' }, { ...memory(), createdAt: '2026-02-30T12:00:00.000Z' },
     { ...memory(), createdAt: '2026-11-09' }, { ...memory(), night: 0 },
     { ...memory(), night: 1.5 }, { ...memory(), night: 1_000_001 },

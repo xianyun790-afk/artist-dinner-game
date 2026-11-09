@@ -24,7 +24,7 @@ export function PaintingScene({ painting, onLeave, subtitle, phase = 'viewing', 
   }, [onLeave]);
   return <section className={`painting-scene ${phase === 'framing' || phase === 'filing' ? 'is-framing' : ''} ${phase === 'filing' ? 'is-filing' : ''}`} data-painting-phase={phase} aria-label={`进入《${painting.title}》画中场景`}>
     <FramedPainting className="painting-object" painting={painting} onLoad={onLoad} onError={() => { setFailed(true); onError?.(); }}/>
-    <button ref={leave} className="painting-leave" onClick={onLeave} aria-label="返回餐桌" title="返回餐桌（Esc）"><X size={21} strokeWidth={1.4}/></button>
+    <button ref={leave} className="painting-leave" onClick={onLeave} disabled={phase === 'framing' || phase === 'filing'} aria-label="退出画布" title="退出画布（Esc）"><X size={21} strokeWidth={1.4}/></button>
     {subtitle&&!failed&&<><div className="painting-subtitle-shade" aria-hidden="true"/><div className="painting-subtitle" role="status" aria-label="艺术家字幕"><p>{subtitle}</p></div></>}
     {(phase === 'framing' || phase === 'filing') && <p className="painting-keepsake" role="status">{phase === 'filing' ? '已收入回忆' : '把这一刻，留在回忆里。'}</p>}
     {failed&&<p className="painting-scene-error" role="status">画作暂时未能加载，可以返回餐桌后再试。</p>}

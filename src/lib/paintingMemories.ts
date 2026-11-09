@@ -5,10 +5,10 @@ import type { PaintingMemory, Save } from './types';
 export const PAINTING_MEMORY_LIMIT = 200;
 const paintingIds = new Set(paintingCatalog.map(p => p.id));
 
-function boundedText(value: unknown, max: number): string | null {
+function boundedText(value: unknown, max: number, allowEmpty = false): string | null {
   if (typeof value !== 'string' || value.length > max) return null;
   const text = value.trim();
-  return text ? text : null;
+  return text || allowEmpty ? text : null;
 }
 
 function cleanMemory(raw: unknown, speakers: ReadonlySet<string>): PaintingMemory | null {
@@ -18,9 +18,9 @@ function cleanMemory(raw: unknown, speakers: ReadonlySet<string>): PaintingMemor
   const paintingId = boundedText(value.paintingId, 100);
   const speakerId = boundedText(value.speakerId, 128);
   const question = boundedText(value.question, 400);
-  const explanation = boundedText(value.explanation, 4000);
+  const explanation = boundedText(value.explanation, 4000, true);
   const createdAt = value.createdAt;
-  if (!id || !paintingId || !paintingIds.has(paintingId) || !speakerId || !speakers.has(speakerId) || !question || !explanation) return null;
+  if (!id || !paintingId || !paintingIds.has(paintingId) || !speakerId || !speakers.has(speakerId) || !question || explanation === null) return null;
   if (typeof createdAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt)) return null;
   const date = new Date(createdAt);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== createdAt) return null;
@@ -45,7 +45,7 @@ export function sanitizePaintingMemories(raw: unknown, validSpeakerIds: Iterable
   return entries.slice(-PAINTING_MEMORY_LIMIT);
 }
 
-/** Call only after a completed encounter; retries with its same ID are inert. */
+/** Call when an encounter is collected; retries with its same ID are inert. */
 export function recordPaintingMemory(save: Save, memory: PaintingMemory): Save {
   const speakers = new Set([...artists, ...save.customArtists].map(a => a.id));
   const next = cleanMemory(memory, speakers);

@@ -25,81 +25,115 @@ function setup() {
   return { journey, archived, tick };
 }
 const explanation = { speakerId: 'vincent', question: '聊聊星月夜', explanation: '柏树伸向夜空。', night: 1 };
-const { hold, frame, file } = PAINTING_JOURNEY_TIMING;
+const { frame, file } = PAINTING_JOURNEY_TIMING;
 
-test('completed narration waits for the image before holding, framing, recording and returning', () => {
+test('completed narration remains in the painting until explicit exit immediately frames it', () => {
   const { journey, archived, tick } = setup();
-  journey.begin('turn-1', '聊聊星月夜'); journey.finish('turn-1', explanation, true);
-  assert.equal(journey.state.finishing, true, 'block input immediately, including image loading and subtitle hold');
-  tick(10_000); assert.equal(journey.state.phase, 'viewing'); assert.equal(archived.length, 0);
-  journey.loaded(starryNight.id); tick(hold - 1); assert.equal(journey.state.phase, 'viewing');
-  tick(1); assert.equal(journey.state.phase, 'framing');
+  journey.begin('turn-1', '聊聊星月夜'); journey.loaded(starryNight.id); journey.finish('turn-1', explanation, true);
+  tick(10_000); assert.equal(journey.state.phase, 'viewing'); assert.equal(journey.state.finishing, false); assert.equal(archived.length, 0);
+  journey.exit(); assert.equal(journey.state.phase, 'framing'); assert.equal(journey.state.finishing, true);
   tick(frame - 1); assert.equal(archived.length, 0);
   tick(1); assert.equal(journey.state.phase, 'filing'); assert.equal(archived.length, 1);
   assert.deepEqual(archived[0], { id: 'turn-1', paintingId: starryNight.id, ...explanation, createdAt: '2026-11-09T13:00:00.000Z' });
   tick(file); assert.equal(journey.state.painting, null); assert.equal(journey.state.suppressed, true); assert.equal(journey.state.finishing, false);
 });
 
-test('cancel and manual leave prevent completion even after framing starts', () => {
-  for (const action of ['cancel', 'leave'] as const) {
+test('exit freezes heard-only progress before completion and ignores later text and repeated exits', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('partial', '星月夜'); journey.loaded(starryNight.id);
+  journey.capture('partial', { ...explanation, explanation: '已经听到的半句。' }); journey.exit();
+  assert.equal(journey.state.phase, 'framing');
+  journey.capture('partial', { ...explanation, explanation: '不应保存的后续台词。' });
+  journey.finish('partial', explanation, true); journey.exit(); journey.loaded(starryNight.id);
+  tick(frame); assert.equal(archived.length, 1); assert.equal(archived[0].explanation, '已经听到的半句。');
+  tick(file + frame); assert.equal(archived.length, 1); assert.equal(journey.state.painting, null);
+});
+
+test('exiting before the first spoken sentence can keep a painting with an empty explanation', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('silent', '星月夜'); journey.capture('silent', { ...explanation, explanation: '' }); journey.loaded(starryNight.id);
+  journey.exit(); tick(frame); assert.equal(archived.length, 1); assert.equal(archived[0].explanation, '');
+});
+
+test('metadata captured before an assistant title is still available when the painting opens', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('introduced', '聊聊夜色'); journey.capture('introduced', explanation);
+  journey.notice('introduced', '说到星月夜'); journey.loaded(starryNight.id); journey.exit(); tick(frame);
+  assert.equal(archived.length, 1); assert.equal(archived[0].paintingId, starryNight.id);
+});
+
+test('image must load by the end of framing and a failed image closes without saving', () => {
+  for (const scenario of ['never-loaded', 'fails-before', 'fails-during', 'loads-during'] as const) {
     const { journey, archived, tick } = setup();
-    journey.begin('turn-1', '星月夜'); journey.loaded(starryNight.id); journey.finish('turn-1', explanation, true); tick(hold);
-    journey[action](); tick(10_000); journey.finish('turn-1', explanation, true); tick(10_000);
-    assert.equal(archived.length, 0, action);
-    assert.equal(journey.state.token, null);
-    assert.equal(journey.state.finishing, false);
+    journey.begin(scenario, '星月夜'); journey.capture(scenario, explanation);
+    if (scenario === 'fails-before') journey.failed(starryNight.id);
+    journey.exit();
+    if (scenario === 'fails-before') { assert.equal(journey.state.painting, null); continue; }
+    assert.equal(journey.state.phase, 'framing', scenario);
+    if (scenario === 'fails-during') journey.failed(starryNight.id);
+    if (scenario === 'loads-during') journey.loaded(starryNight.id);
+    tick(frame); assert.equal(archived.length, scenario === 'loads-during' ? 1 : 0, scenario);
+    tick(file); assert.equal(journey.state.painting, null, scenario);
+    journey.loaded(starryNight.id); tick(10_000); assert.equal(archived.length, scenario === 'loads-during' ? 1 : 0);
   }
 });
 
-test('a newer turn invalidates old callbacks and replaces pending completion', () => {
+test('incomplete final replies preserve the last captured progress without auto framing', () => {
   const { journey, archived, tick } = setup();
-  journey.begin('old', '星月夜'); journey.loaded(starryNight.id); journey.finish('old', explanation, true); tick(hold);
-  journey.begin('new', '再看睡莲'); journey.notice('old', '星月夜'); journey.finish('old', explanation, true);
-  assert.equal(journey.state.finishing, false);
-  tick(10_000); assert.equal(archived.length, 0); assert.equal(journey.state.painting, waterLilies);
-  journey.loaded(waterLilies.id); journey.finish('new', { ...explanation, speakerId: 'monet' }, true); tick(hold + frame);
+  journey.begin('incomplete', '星月夜'); journey.loaded(starryNight.id);
+  journey.capture('incomplete', { ...explanation, explanation: '实际听过的话。' });
+  journey.finish('incomplete', explanation, false); tick(10_000);
+  assert.equal(journey.state.phase, 'viewing'); assert.equal(archived.length, 0);
+  journey.exit(); tick(frame); assert.equal(archived[0].explanation, '实际听过的话。');
+});
+
+test('cancel and leave invalidate progress; cancellation during closing removes pending archive', () => {
+  for (const action of ['cancel', 'leave'] as const) {
+    const { journey, archived, tick } = setup();
+    journey.begin('turn-1', '星月夜'); journey.loaded(starryNight.id); journey.capture('turn-1', explanation); journey.exit();
+    journey[action](); tick(10_000); journey.finish('turn-1', explanation, true); tick(10_000);
+    assert.equal(archived.length, 0, action); assert.equal(journey.state.painting, null); assert.equal(journey.state.token, null); assert.equal(journey.state.finishing, false);
+  }
+  const { journey, archived, tick } = setup();
+  journey.begin('cancel-view', '星月夜'); journey.capture('cancel-view', explanation); journey.cancel();
+  assert.equal(journey.state.painting, starryNight); journey.loaded(starryNight.id); journey.exit(); tick(frame);
+  assert.equal(archived.length, 0); assert.equal(journey.state.painting, null);
+});
+
+test('newer turns invalidate old callbacks and replace a pending frame', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('old', '星月夜'); journey.loaded(starryNight.id); journey.capture('old', explanation); journey.exit();
+  journey.begin('new', '再看睡莲'); journey.capture('old', explanation); journey.notice('old', '星月夜'); journey.finish('old', explanation, true);
+  assert.equal(journey.state.finishing, false); tick(10_000); assert.equal(archived.length, 0); assert.equal(journey.state.painting, waterLilies);
+  journey.loaded(waterLilies.id); journey.capture('new', { ...explanation, speakerId: 'monet' }); journey.exit(); tick(frame);
   assert.equal(archived.length, 1); assert.equal(archived[0].id, 'new'); assert.equal(archived[0].paintingId, waterLilies.id);
 });
 
-test('failed images and incomplete narration never archive', () => {
+test('declining display suppresses mentions and later speech cannot reopen a left scene', () => {
   const { journey, archived, tick } = setup();
-  journey.begin('first', '星月夜'); journey.loaded(starryNight.id); journey.finish('first', explanation, false); tick(10_000);
-  assert.equal(journey.state.finishing, false);
-  assert.equal(archived.length, 0); assert.equal(journey.state.phase, 'viewing');
-  journey.finish('first', explanation, true); tick(hold); journey.failed(starryNight.id); tick(10_000);
-  assert.equal(journey.state.finishing, false);
-  assert.equal(archived.length, 0); assert.equal(journey.state.phase, 'viewing');
-  journey.finish('first', explanation, true); tick(10_000); assert.equal(archived.length, 0);
-});
-
-test('declining display suppresses assistant mentions and later speech cannot reopen a left scene', () => {
-  const { journey, archived, tick } = setup();
-  journey.begin('first', '不要展示图片，只聊星月夜'); journey.notice('first', '星月夜里的柏树'); journey.loaded(starryNight.id); journey.finish('first', explanation, true); tick(10_000);
+  journey.begin('first', '不要展示图片，只聊星月夜'); journey.capture('first', explanation); journey.notice('first', '星月夜里的柏树'); journey.exit(); tick(10_000);
   assert.equal(journey.state.painting, null); assert.equal(archived.length, 0);
-  journey.begin('second', '再看星月夜'); journey.leave(); journey.notice('second', '星月夜');
-  assert.equal(journey.state.painting, null);
+  journey.begin('second', '再看星月夜'); journey.leave(); journey.notice('second', '星月夜'); assert.equal(journey.state.painting, null);
   journey.begin('third', '接着说'); journey.notice('third', '星月夜'); assert.equal(journey.state.painting, null);
 });
 
-test('replay is inert and cannot trigger a new memory from an old audio callback', () => {
+test('replay exit also frames the image while remaining unable to duplicate a memory', () => {
   const { journey, archived, tick } = setup();
-  journey.begin('old', '星月夜'); journey.replay(waterLilies); journey.loaded(waterLilies.id);
-  assert.equal(journey.state.finishing, false);
-  journey.notice('old', '星月夜'); journey.finish('old', explanation, true); tick(10_000);
-  assert.equal(journey.state.phase, 'replay'); assert.equal(journey.state.painting, waterLilies); assert.equal(archived.length, 0);
+  journey.begin('old', '星月夜'); journey.capture('old', explanation); journey.replay(waterLilies); journey.loaded(waterLilies.id);
+  journey.capture('old', explanation); journey.notice('old', '星月夜'); journey.finish('old', explanation, true); tick(10_000);
+  assert.equal(journey.state.phase, 'replay'); journey.exit(); assert.equal(journey.state.phase, 'framing'); assert.equal(journey.state.finishing, true);
+  journey.exit(); tick(frame + file); assert.equal(journey.state.painting, null); assert.equal(archived.length, 0);
 });
 
-test('duplicate completion and image load events archive once; filing cancellation preserves recorded memory', () => {
+test('filing cancellation preserves the already archived memory without duplicating it', () => {
   const { journey, archived, tick } = setup();
-  journey.begin('once', '星月夜'); journey.loaded(starryNight.id); journey.finish('once', explanation, true);
-  journey.loaded(starryNight.id); journey.finish('once', explanation, true); tick(hold + frame);
-  assert.equal(archived.length, 1); journey.finish('once', explanation, true); journey.cancel(); tick(10_000);
+  journey.begin('once', '星月夜'); journey.loaded(starryNight.id); journey.capture('once', explanation); journey.exit(); tick(frame);
+  assert.equal(archived.length, 1); journey.finish('once', explanation, true); journey.exit(); journey.cancel(); tick(10_000);
   assert.equal(archived.length, 1); assert.equal(journey.state.token, null);
 });
 
-test('ordinary follow-ups retain a visible painting and disposal removes scheduled work', () => {
+test('ordinary follow-ups retain the visible painting and disposal removes pending work', () => {
   const { journey, archived, tick } = setup();
   journey.begin('first', '星月夜'); journey.begin('follow-up', '那棵树呢？'); assert.equal(journey.state.painting, starryNight);
-  journey.loaded(starryNight.id); journey.finish('follow-up', explanation, true); journey.dispose(); tick(10_000);
-  assert.equal(archived.length, 0);
+  journey.loaded(starryNight.id); journey.capture('follow-up', explanation); journey.exit(); journey.dispose(); tick(10_000); assert.equal(archived.length, 0);
 });

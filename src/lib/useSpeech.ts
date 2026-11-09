@@ -67,7 +67,7 @@ export function useSpeech() {
   }, [available]);
   useEffect(() => () => { release(); void context.current?.close(); }, [release]);
   const voiceFor = useCallback((a: Artist) => a.serviceVoice ?? (catalog ? defaultServiceVoice(a.id, catalog) : undefined), [catalog]);
-  const startStream = useCallback((a: Artist, signal?: AbortSignal) => {
+  const startStream = useCallback((a: Artist, signal?: AbortSignal, onCaption?: (text: string) => void) => {
     stop(); setError(''); setFirstAudioMs(null); unlock(); const turn = seq.current, startedAt = performance.now();
     const controller = new AbortController(); request.current = controller;
     const cancel = () => { if (turn === seq.current) stop(); else controller.abort(); };
@@ -110,7 +110,8 @@ export function useSpeech() {
         if (!active()) { resolve(); return; }
         // Follow the single playback queue, rather than text arriving ahead
         // from the model. Keep the last clause readable after speech finishes.
-        const showCaption = () => { if (active()) setCaption({ artistId: a.id, text }); };
+        let shown = false;
+        const showCaption = () => { if (active()) { setCaption({ artistId: a.id, text }); if (!shown) { shown = true; onCaption?.(text); } } };
         const finished = () => { controller.signal.removeEventListener('abort', finished); resolve(); };
         controller.signal.addEventListener('abort', finished, { once: true });
         if (buffer) {

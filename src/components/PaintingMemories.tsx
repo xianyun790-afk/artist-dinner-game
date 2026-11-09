@@ -16,8 +16,8 @@ export function PaintingMemories({ memories, artists, onReplay }: {
           <FramedPainting painting={painting}/>
         </button>
         <div className="painting-memory-copy"><h3>{painting.title}</h3><p>{painting.artist} · {painting.year}</p>
-          <small>{new Date(memory.createdAt).toLocaleDateString('zh-CN')} · 第{memory.night}夜{speaker ? ` · 和${speaker.name}聊过` : ''}</small>
-          <details><summary>当时的对话</summary><p className="memory-question">你：{memory.question}</p><p>{memory.explanation}</p></details>
+          <small>{new Date(memory.createdAt).toLocaleDateString('zh-CN')} · 第{memory.night}夜{!memory.explanation ? ' · 先看了画' : speaker ? ` · 和${speaker.name}聊过` : ''}</small>
+          <details><summary>当时的对话</summary><p className="memory-question">你：{memory.question}</p><p>{memory.explanation || '这次先看了画，还没有开始讲解。'}</p></details>
         </div>
       </article>;
     })}</div> : <div className="painting-memory-empty"><BookOpen size={25} strokeWidth={1.2}/><p>听完一幅画，它会带着那段对话留在这里。</p></div>}
