@@ -22,7 +22,7 @@ export function useRoomVoice(onText:(text:string)=>void,blocked:boolean){
     try{r.start();}catch{current.current=null;intent.current=false;setEnabled(false);setError('语音输入没有启动，可以重试或先打字聊天。');}
   };startRef.current=start;
   const toggle=()=>{if(intent.current){stop();return;}setError('');intent.current=true;setEnabled(true);startRef.current();};
-  useEffect(()=>{if(blocked)stopCurrent();else if(intent.current)restart.current=setTimeout(()=>startRef.current(),550);return()=>{if(restart.current)clearTimeout(restart.current);};},[blocked,stopCurrent]);
+  useEffect(()=>{if(blocked)stopCurrent();else if(intent.current)restart.current=setTimeout(()=>startRef.current(),180);return()=>{if(restart.current)clearTimeout(restart.current);};},[blocked,stopCurrent]);
   useEffect(()=>{const visibility=()=>{if(document.hidden)stop();};document.addEventListener('visibilitychange',visibility);return()=>{intent.current=false;stopCurrent();document.removeEventListener('visibilitychange',visibility);};},[stop,stopCurrent]);
   return{enabled,listening,interim,error,toggle,stop};
 }

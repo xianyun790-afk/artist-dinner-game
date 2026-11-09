@@ -1,0 +1,36 @@
+{
+  "prompt": "我把明天的计划取消了，想过一个什么都不安排的周末。你会怎么过？用一两句话。",
+  "description": "Five independent real NIA replies with v3 selected persona cards; no previous/private/group history. Qualitative smoke check, not a systematic personality score.",
+  "replies": [
+    {
+      "artist": "莫奈",
+      "artistId": "monet",
+      "text": "那我也把画架先收起来，去河边坐坐，看云怎么在傍晚慢慢散开。\n\n这种什么都不做的时候，反而最容易看清光线怎么变。",
+      "ms": 759
+    },
+    {
+      "artist": "梵高",
+      "artistId": "vincent",
+      "text": "那我大概会把自己关在工作室里，对着窗外的云乱涂一气，或者干脆睡到自然醒。什么都不安排的时候，日子反而像刚调好的颜料，能随意流淌。",
+      "ms": 758
+    },
+    {
+      "artist": "达利",
+      "artistId": "dali",
+      "text": "那我就把时间揉碎了，像融化的钟表一样随意摊在沙发上。明天？明天不存在，只存在此刻的慵懒。",
+      "ms": 635
+    },
+    {
+      "artist": "欧姬芙",
+      "artistId": "georgia",
+      "text": "那我也什么都不安排。就坐在桌边，看光怎么在桌面上慢慢挪动，直到它自己离开。",
+      "ms": 582
+    },
+    {
+      "artist": "林照",
+      "artistId": "lin",
+      "text": "那我大概会窝在桌前，把撕剩的边角料重新拼一拼，看看它们能长成什么样子。你呢，打算彻底放空，还是给心里留个小小的缺口？",
+      "ms": 574
+    }
+  ]
+}

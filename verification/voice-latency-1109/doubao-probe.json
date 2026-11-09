@@ -1,0 +1,12 @@
+[
+  {
+    "model": "seed-tts-2.0-standard",
+    "ms": 1164,
+    "bytes": 30381
+  },
+  {
+    "model": "seed-tts-2.0-expressive",
+    "ms": 1195,
+    "bytes": 35565
+  }
+]

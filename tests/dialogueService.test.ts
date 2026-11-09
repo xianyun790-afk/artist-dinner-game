@@ -20,3 +20,30 @@ test('dialogue calls only the configured backend with no browser credentials and
   }) as typeof fetch;
   assert.equal(await requestDialogue('http://localhost:4894', body, signal, fetcher), '在听。');
 });
+
+test('UTF-8 streaming delivers the first complete clause before the final response and never repeats the final text', async () => {
+  let output!: ReadableStreamDefaultController<Uint8Array>;
+  const encoder = new TextEncoder(), parts: string[] = [];
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { output = controller; } });
+  const fetcher = (async (_url, init) => {
+    assert.equal((init?.headers as Record<string,string>).Accept, 'application/x-ndjson');
+    return new Response(stream, { headers: { 'Content-Type': 'application/x-ndjson' } });
+  }) as typeof fetch;
+  const pending = requestDialogue('http://localhost:4894', dialogueBody(artists[0], '你好', [], 'private'), new AbortController().signal, fetcher, text => parts.push(text));
+  const first = '不用急着找答案，我愿意听你说。';
+  const packet = encoder.encode(JSON.stringify({ type: 'text', text: first })+'\n');
+  output.enqueue(packet.slice(0, 29)); output.enqueue(packet.slice(29));
+  await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(parts, [first]);
+  const final = first + '慢慢来。';
+  output.enqueue(encoder.encode(JSON.stringify({ type: 'done', text: final })+'\n')); output.close();
+  assert.equal(await pending, final); assert.equal(parts.join(''), final);
+});
+test('an interrupted or truncated dialogue stream cannot silently report a complete reply', async () => {
+  const first = '先坐下来，慢慢把事情说清楚。';
+  for (const ending of ['', JSON.stringify({ type: 'error', error: 'failed' })+'\n']) {
+    const parts: string[] = [];
+    const fetcher = (async () => new Response(JSON.stringify({ type: 'text', text: first })+'\n'+ending, { headers: { 'Content-Type': 'application/x-ndjson' } })) as typeof fetch;
+    await assert.rejects(requestDialogue('http://localhost:4894', dialogueBody(artists[0], '你好', [], 'private'), new AbortController().signal, fetcher, text => parts.push(text)));
+    assert.deepEqual(parts, [first]);
+  }
+});

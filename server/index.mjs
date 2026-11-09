@@ -47,10 +47,22 @@ const server = createServer(async (req, res) => {
     if (controller.signal.aborted) return;
     if (running >= 3) { send(429, { error: '正在处理其他对话，请稍后重试。' }); return; }
     running++; counted = true;
-    const text = await generateNiaReply({ ...payload, config, signal: controller.signal });
-    send(200, { ok: true, text, source: 'nia' });
+    const streaming = req.headers.accept?.includes('application/x-ndjson');
+    const write = data => { if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(data) + '\n'); };
+    if (streaming) {
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('X-Accel-Buffering', 'no'); res.flushHeaders();
+    }
+    const text = await generateNiaReply({ ...payload, config, signal: controller.signal,
+      onText: streaming ? text => write({ type: 'text', text }) : undefined });
+    if (streaming) { write({ type: 'done', text, source: 'nia' }); res.end(); }
+    else send(200, { ok: true, text, source: 'nia' });
   } catch (error) {
-    if (error?.name !== 'AbortError') send(502, { error: error instanceof Error ? error.message : 'NIA 暂时没有回复。' });
+    if (error?.name !== 'AbortError') {
+      const detail = error instanceof Error ? error.message : 'NIA 暂时没有回复。';
+      if (res.headersSent) { if (!res.destroyed && !res.writableEnded) res.end(JSON.stringify({ type: 'error', error: detail }) + '\n'); }
+      else send(502, { error: detail });
+    }
   } finally { if (counted) running--; }
 });
 server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? `本机对话端口 ${port} 已在使用。` : '本机对话服务未能启动。'); process.exitCode = 1; });

@@ -28,8 +28,7 @@ export default function App(){
   const [reply,setReply]=useState<{artistId:string;text:string;thinking:boolean}|null>(null);
   const [activeGroupId,setActiveGroupId]=useState<string|null>(null);
   const [groupRunning,setGroupRunning]=useState(false);const groupRequest=useRef<AbortController|null>(null);const dialogueRequest=useRef<AbortController|null>(null);
-  const [pending,setPending]=useState(false);const replyTimer=useRef<ReturnType<typeof setTimeout>|null>(null);const previousSpeaker=useRef<string|null>(null);
-  useEffect(()=>()=>{if(replyTimer.current)clearTimeout(replyTimer.current);},[]);
+  const [pending,setPending]=useState(false);const previousSpeaker=useRef<string|null>(null);
   const dialogue=useDialogue();const dialogueRef=useRef(dialogue);dialogueRef.current=dialogue;
   const speech=useSpeech();const speechRef=useRef(speech);speechRef.current=speech;
   const catalog=useMemo(()=>allArtists(save.customArtists).map(a=>({...a,...save.voiceSettings[a.id]})),[save.customArtists,save.voiceSettings]);
@@ -37,7 +36,7 @@ export default function App(){
   const guests=(activeGroup?.memberIds??save.invited).map(id=>catalog.find(a=>a.id===id)).filter((a):a is Artist=>!!a);
   const active=catalog.find(a=>a.id===save.activeId);const person=active?save.people[active.id]:undefined;
   const last=person?.messages.filter(m=>m.who==='artist').at(-1);
-  const stopConversation=useCallback(()=>{groupRequest.current?.abort();groupRequest.current=null;dialogueRequest.current?.abort();dialogueRequest.current=null;setGroupRunning(false);if(replyTimer.current){clearTimeout(replyTimer.current);replyTimer.current=null;}setPending(false);setReply(r=>r?.thinking?null:r);speechRef.current.stop();},[]);
+  const stopConversation=useCallback(()=>{groupRequest.current?.abort();groupRequest.current=null;dialogueRequest.current?.abort();dialogueRequest.current=null;setGroupRunning(false);setPending(false);setReply(r=>r?.thinking?null:r);speechRef.current.stop();},[]);
   useEffect(()=>()=>{groupRequest.current?.abort();dialogueRequest.current?.abort();},[]);
   useEffect(()=>{if(panel)stopConversation();},[panel,stopConversation]);
   useEffect(()=>{const quiet=()=>{if(document.hidden)stopConversation();};document.addEventListener('visibilitychange',quiet);return()=>document.removeEventListener('visibilitychange',quiet);},[stopConversation]);
@@ -63,40 +62,49 @@ export default function App(){
       const controller=new AbortController();groupRequest.current=controller;setGroupRunning(true);
       const roundHistory:DialogueLine[]=activeGroup.messages.map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':catalog.find(a=>a.id===m.artistId)?.name}));
       roundHistory.push({who:'player',text:input,name:'玩家'});
+      let voiceCompletion=Promise.resolve();
       void playGroupRound(responses,controller.signal,{
         thinking:r=>setReply({artistId:r.artist.id,text:'',thinking:true}),
-        generate:async(r,signal)=>({...r,text:await dialogueRef.current.reply(r.artist,input,roundHistory,'group',r.text,signal)}),
+        generate:async(r,signal)=>{
+          const voice=speechRef.current.startStream(r.artist,signal);voiceCompletion=voice.done;let partial='';
+          try{return {...r,text:await dialogueRef.current.reply(r.artist,input,roundHistory,'group',r.text,signal,sentence=>{
+            partial+=sentence;voice.push(sentence);setReply({artistId:r.artist.id,text:partial,thinking:false});
+          })};}finally{voice.end();}
+        },
         present:r=>{roundHistory.push({who:'artist',name:r.artist.name,text:r.text});setReply({artistId:r.artist.id,text:r.text,thinking:false});setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'artist',artistId:r.artist.id,text:r.text}));},
-        speak:r=>speechRef.current.play(r.text,r.artist),pause:groupPause,
+        speak:()=>voiceCompletion,pause:groupPause,
       }).catch(()=>{/* User interruption discards this round. */}).finally(()=>{if(groupRequest.current===controller){groupRequest.current=null;setGroupRunning(false);}});
       return;
     }
     if(pending)return;
     const a=responderFor(input,guests,preferred,previousSpeaker.current);if(!a)return;
     speech.unlock();speech.stop();setSuggestion(null);setPending(true);setReply({artistId:a.id,text:'',thinking:true});previousSpeaker.current=a.id;
-    if(replyTimer.current)clearTimeout(replyTimer.current);
     const controller=new AbortController();dialogueRequest.current=controller;
-    replyTimer.current=setTimeout(async()=>{
+    void (async()=>{
       const base=save.ended?nextNight(save):save;
       const result=freeTalk(enterConversation(base,a),a,input);const p=result.people[a.id];
       // Short topic replies are authored for this shared table, preserving the
       // emotion/boundary handling in the local conversation engine.
       const contextual=roomReply(a,input);if(contextual&&!/闭嘴|垃圾|蠢|必须|抱歉|对不起|不想|不要|别|不愿/.test(input))p.messages[p.messages.length-1].text=contextual;
       const authored=p.messages.filter(m=>m.who==='artist').at(-1)?.text??a.quiet;
+      const voice=speechRef.current.startStream(a,controller.signal);let partial='';
       let line=authored;
-      try {line=await dialogueRef.current.reply(a,input,(save.people[a.id]?.messages??[]).map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':a.name})),'private',authored,controller.signal);}
+      try {line=await dialogueRef.current.reply(a,input,(save.people[a.id]?.messages??[]).map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':a.name})),'private',authored,controller.signal,sentence=>{
+        partial+=sentence;voice.push(sentence);setReply({artistId:a.id,text:partial,thinking:false});
+      });}
       catch {return;}
+      finally{voice.end();}
       if(controller.signal.aborted||dialogueRequest.current!==controller)return;
       dialogueRequest.current=null;
       const lastReply=p.messages.filter(m=>m.who==='artist').at(-1);if(lastReply)lastReply.text=line;
-      setSave(result);setReply({artistId:a.id,text:line,thinking:false});setPending(false);speechRef.current.play(line,a);
+      setSave(result);setReply({artistId:a.id,text:line,thinking:false});setPending(false);
       const key=detectKeyword(input);
       if((key==='invite'&&/邀请|来宾册|换.*人设/.test(input))||(key==='settings'&&/设置|音色/.test(input)))setSuggestion(key);
-    },600);
+    })();
   };
   const confirmSuggestion=()=>{const key=suggestion;setSuggestion(null);if(key==='art')beginArt();else if(key==='works')setPanel('works');else if(key==='invite')setPanel('guests');else if(key==='settings')setPanel('settings');else if(key==='memory')setPanel('memory');else if(key==='end')setPanel('end');};
   return <div className="app-shell fullscreen-dinner">
-    <main className="main-content"><section className="stage-shell room-stage" aria-label="艺术家晚宴场景"><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply}/></div></div>
+    <main className="main-content"><section className="stage-shell room-stage" aria-label="艺术家晚宴场景" data-first-audio-ms={speech.firstAudioMs??undefined} data-voice-status={speech.status}><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply}/></div></div>
       <button className="room-add-artist" aria-label="添加艺术家" title="添加艺术家" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('addArtist');}}><UserRoundPlus size={21} strokeWidth={1.5}/></button>
       <button className="room-add-artist room-group-button" aria-label="发起群聊" title="发起群聊" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('groups');}}><UsersRound size={21} strokeWidth={1.5}/></button>
       {activeGroup&&<div className="room-group-status"><button onClick={()=>{stopConversation();setPanel('groups');}} aria-label="查看当前群聊"><UsersRound size={13}/><span>{activeGroup.name}</span></button><button aria-label="离开群聊" title="离开群聊" onClick={()=>{stopConversation();setActiveGroupId(null);setPreferred(null);setReply(null);}}><X size={14}/></button></div>}

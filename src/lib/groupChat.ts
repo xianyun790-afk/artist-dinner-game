@@ -64,5 +64,5 @@ export async function playGroupRound(replies: GroupReply[], signal: AbortSignal,
 export const groupPause = (signal: AbortSignal) => new Promise<void>(resolve => {
   if (signal.aborted) { resolve(); return; }
   const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
-  const timer = setTimeout(done, 650); signal.addEventListener('abort', done, { once: true });
+  const timer = setTimeout(done, 0); signal.addEventListener('abort', done, { once: true });
 });

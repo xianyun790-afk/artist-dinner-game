@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVoiceCatalog, voicesForModel, defaultServiceVoice, validateServiceVoice, loadVoiceCatalog, connectVoiceCatalog, synthesizeVoice, synthesisBody, serviceUrl } from '../src/lib/voiceService.ts';
+import { parseVoiceCatalog, voicesForModel, defaultServiceVoice, artistVoicePreset, artistSpeechStyle, validateServiceVoice, loadVoiceCatalog, connectVoiceCatalog, synthesizeVoice, synthesisBody, serviceUrl } from '../src/lib/voiceService.ts';
 const config = { providers: {
   minimax: { ready: true, defaultModel: 'speech-2.8-hd', defaultVoice: 'default', apiKey: 'DO-NOT-COPY', models: [{ id: 'speech-2.8-hd' }, { id: 'speech-2.8-turbo' }], voices: [{ id: 'default', name: '默认' }, { id: 'Chinese (Mandarin)_Gentleman', name: '温润' }] },
   aliyun: { ready: true, defaultModel: 'cosyvoice-v3-plus', defaultVoice: 'base', models: [{ id: 'cosyvoice-v3-plus' }, { id: 'cosyvoice-v3.5-plus', voices: [] }], voices: [{ id: 'base', name: '系统音色' }] },
@@ -28,6 +28,34 @@ test('built-in default is available, custom artist uses the declared service def
   assert.equal(defaultServiceVoice('custom-monet-picture', catalog)?.voice, 'default');
   assert.equal(validateServiceVoice({ provider: 'aliyun', model: 'cosyvoice-v3-plus', voice: 'new-clone' }, catalog), false);
   assert.equal(validateServiceVoice({ provider: 'sensetimev5', model: 'tts-v5', voice: 'v5-clone' }, catalog), true);
+});
+test('artist recommendations use available fast voices, retain a compatible alternative, and do not assign a historical identity to custom artists', () => {
+  const available = parseVoiceCatalog({ providers: { minimax: { ...config.providers.minimax, voices: [
+    ...config.providers.minimax.voices, { id: 'Chinese (Mandarin)_Lyrical_Voice', name: '抒情男声' },
+    { id: 'Chinese (Mandarin)_Unrestrained_Young_Man', name: '不羁青年' },
+  ] } } }, {});
+  const monet = artistVoicePreset('monet', available)!;
+  assert.equal(monet.choice.voice, 'Chinese (Mandarin)_Lyrical_Voice');
+  assert.equal(monet.choice.model, 'speech-2.8-turbo');
+  assert.notEqual(monet.choice.voice, artistVoicePreset('vincent', available)?.choice.voice);
+  assert.equal(artistVoicePreset('monet', catalog)?.choice.voice, 'Chinese (Mandarin)_Gentleman');
+  assert.equal(artistVoicePreset('custom-monet-picture', available), undefined);
+});
+test('Doubao 2.0 is preferred for built-in conversation voices only when its model and voice are available', () => {
+  const available = parseVoiceCatalog({ providers: { minimax: config.providers.minimax, volcengine: {
+    ready: true, defaultModel: 'seed-tts-2.0-standard', models: [{ id: 'seed-tts-2.0-standard' }],
+    voices: [{ id: 'zh_male_m191_uranus_bigtts', name: '云舟' }],
+  } } }, {});
+  assert.deepEqual(defaultServiceVoice('monet', available), { provider: 'volcengine', model: 'seed-tts-2.0-standard', voice: 'zh_male_m191_uranus_bigtts' });
+  assert.equal(defaultServiceVoice('custom', available)?.voice, 'default');
+  assert.equal(defaultServiceVoice('monet', catalog)?.provider, 'minimax');
+});
+test('natural speaking instructions are passed only to the expressive model, without user source material or changing spoken text', () => {
+  const choice = { provider: 'volcengine' as const, model: 'seed-tts-2.0-expressive', voice: 'v' }, style = artistSpeechStyle('monet');
+  const body = synthesisBody(choice, '先坐一会儿。', .94, .97, style);
+  assert.equal(body.options.contextTexts, style); assert.equal(body.text, '先坐一会儿。');
+  assert.equal(synthesisBody({ ...choice, model: 'seed-tts-2.0-standard' }, '先坐一会儿。', 1, 1, style).options.contextTexts, undefined);
+  assert.notEqual(artistSpeechStyle('monet'), artistSpeechStyle('dali'));
 });
 test('catalog requests no shared history and still permits system voices if the optional library is down', async () => {
   const paths: string[] = [];

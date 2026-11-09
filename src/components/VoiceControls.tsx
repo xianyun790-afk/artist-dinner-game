@@ -1,7 +1,7 @@
 import { Square, Volume2 } from 'lucide-react';
 import type { Artist, ArtistVoiceSettings } from '@/lib/types';
 import { voiceEngineFor, type SpeechController } from '@/lib/useSpeech';
-import { voicesForModel, type ServiceVoice } from '@/lib/voiceService';
+import { artistVoicePreset, voicesForModel, type ServiceVoice } from '@/lib/voiceService';
 
 export function VoiceControls({ catalog, artist, onArtist, onChange, speech }: {
   catalog: Artist[]; artist: Artist; onArtist: (id: string) => void;
@@ -11,6 +11,7 @@ export function VoiceControls({ catalog, artist, onArtist, onChange, speech }: {
   const providers = speech.catalog?.providers ?? [];
   const provider = providers.find(p => p.id === choice?.provider);
   const voices = provider && choice ? voicesForModel(provider, choice.model) : [];
+  const recommended = speech.catalog ? artistVoicePreset(artist.id, speech.catalog) : undefined;
   const setChoice = (next: ServiceVoice) => { speech.stop(); onChange({ voiceEngine: 'service', serviceVoice: next }); };
   return <div className="settings-section voice-settings">
     <h3><Volume2 size={16}/>来宾的声音</h3>
@@ -20,6 +21,10 @@ export function VoiceControls({ catalog, artist, onArtist, onChange, speech }: {
     </select></label>
     {engine === 'service' ? <>
       <div className="voice-connection"><span>{speech.connection === 'ready' ? '音色服务已连接' : speech.connection === 'connecting' ? '正在连接音色服务…' : speech.connection === 'off' ? '尚未配置音色服务' : '音色服务未连接'}</span>{speech.serviceConfigured && <button className="text-btn" disabled={speech.connection === 'connecting'} onClick={() => { speech.stop(); void speech.refresh(); }}>重新连接</button>}</div>
+      {recommended && <div className="artist-voice-recommendation"><strong>{recommended.title}</strong><p className="form-note">{recommended.description}{recommended.choice.provider === 'volcengine' ? ' 使用豆包 2.0 自然对话音色。' : ''}</p><button className="text-btn" disabled={speech.loading} onClick={() => {
+        const settings = { voiceEngine: 'service' as const, serviceVoice: recommended.choice, rate: recommended.rate, pitch: recommended.pitch };
+        speech.stop(); onChange(settings); void speech.play(artist.greeting, { ...artist, ...settings });
+      }}><Volume2 size={14}/>采用推荐音色并试听</button></div>}
       {providers.length > 0 && <label>语音平台<select value={provider?.id ?? ''} onChange={e => {
           const next = providers.find(p => p.id === e.target.value)!;
           const options = voicesForModel(next, next.defaultModel);

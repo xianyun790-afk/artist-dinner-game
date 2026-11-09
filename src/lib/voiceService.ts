@@ -1,4 +1,4 @@
-export const providerNames = { minimax: 'MiniMax', volcengine: '火山引擎', aliyun: '阿里云', sensetime: '商汤 V4', sensetimev5: '商汤 V5' };
+export const providerNames = { minimax: 'MiniMax', volcengine: '豆包语音 · 火山引擎', aliyun: '阿里云', sensetime: '商汤 V4', sensetimev5: '商汤 V5' };
 export type ProviderId = keyof typeof providerNames;
 export interface ServiceVoice { provider: ProviderId; model: string; voice: string }
 export interface VoiceEntry { id: string; name: string; model?: string; library?: boolean }
@@ -50,17 +50,45 @@ export function validateServiceVoice(choice: ServiceVoice, catalog: VoiceCatalog
   return !!provider && voicesForModel(provider, choice.model).some(v => v.id === choice.voice);
 }
 
-const suggested: Record<string, string> = {
-  monet: 'Chinese (Mandarin)_Gentleman', vincent: 'Chinese (Mandarin)_Sincere_Adult',
-  dali: 'Chinese (Mandarin)_Radio_Host', georgia: 'Chinese (Mandarin)_Wise_Women', lin: 'Chinese (Mandarin)_Gentle_Senior',
+const artistVoices: Record<string, { title: string; description: string; voices: string[]; rate: number; pitch: number }> = {
+  monet: { title: '莫奈 · 沉静叙事', description: '柔和、有阅历，留一点思索的停顿。', voices: ['Chinese (Mandarin)_Lyrical_Voice', 'Chinese (Mandarin)_Gentleman'], rate: .94, pitch: .97 },
+  vincent: { title: '梵高 · 热切坦诚', description: '有劲、有温度，像想到什么就认真说出来。', voices: ['Chinese (Mandarin)_Unrestrained_Young_Man', 'Chinese (Mandarin)_Sincere_Adult'], rate: 1, pitch: .98 },
+  dali: { title: '达利 · 机敏戏剧感', description: '咬字鲜明、节奏轻快，让一个小意外自然出现。', voices: ['Chinese (Mandarin)_Radio_Host'], rate: 1.04, pitch: 1.04 },
+  georgia: { title: '欧姬芙 · 成熟克制', description: '清楚、从容，短句也有自己的分量。', voices: ['Chinese (Mandarin)_Wise_Women', 'female-chengshu'], rate: .95, pitch: 1 },
+  lin: { title: '林照 · 细腻亲近', description: '轻柔、耐心，像坐在旁边听完一个故事。', voices: ['Chinese (Mandarin)_Gentle_Senior'], rate: .98, pitch: 1.02 },
 };
-export function defaultServiceVoice(artistId: string, catalog: VoiceCatalog): ServiceVoice | undefined {
-  const preferred = catalog.providers.find(p => p.id === 'minimax');
-  if (preferred && suggested[artistId]) {
-    const model = preferred.models.some(m => m.id === 'speech-2.8-turbo') ? 'speech-2.8-turbo' : preferred.defaultModel;
-    const choice = { provider: preferred.id, model, voice: suggested[artistId] };
-    if (validateServiceVoice(choice, catalog)) return choice;
+export function artistVoicePreset(artistId: string, catalog: VoiceCatalog) {
+  const preset = artistVoices[artistId];
+  if (!preset) return undefined;
+  const doubaoVoices: Record<string, string[]> = {
+    monet: ['zh_male_m191_uranus_bigtts'],
+    vincent: ['zh_male_wennuanahu_uranus_bigtts', 'zh_male_taocheng_uranus_bigtts'],
+    dali: ['zh_male_sophie_uranus_bigtts', 'zh_male_liufei_uranus_bigtts'],
+    georgia: ['zh_female_cancan_uranus_bigtts'],
+    lin: ['zh_female_qingxinnvsheng_uranus_bigtts', 'zh_female_xiaohe_uranus_bigtts'],
+  };
+  for (const id of ['volcengine', 'minimax'] as const) {
+    const provider = catalog.providers.find(p => p.id === id);
+    if (!provider) continue;
+    const preferredModel = id === 'volcengine' ? 'seed-tts-2.0-standard' : 'speech-2.8-turbo';
+    const model = provider.models.some(m => m.id === preferredModel) ? preferredModel : provider.defaultModel;
+    const voice = (id === 'volcengine' ? doubaoVoices[artistId] : preset.voices).find(v => validateServiceVoice({ provider: id, model, voice: v }, catalog));
+    if (voice) return { title: preset.title, description: preset.description, rate: preset.rate, pitch: preset.pitch, choice: { provider: id, model, voice } };
   }
+}
+export function artistSpeechStyle(artistId: string) {
+  const styles: Record<string, string> = {
+    monet: '像和朋友坐在一起聊天，语气沉静温和，有一点思索的停顿，不用播音腔，不要刻意压低声音。',
+    vincent: '像和朋友认真聊一件在意的事，热切坦诚，有活力但不喊，不用销售或播报腔。',
+    dali: '自然聊天，机敏有趣，带一点戏剧感但不夸张表演，不用播报腔。',
+    georgia: '自然聊天，成熟从容、简洁清楚，有温度但不撒娇，不用播报腔。',
+    lin: '像在朋友旁边耐心听故事，语气轻柔亲切，不撒娇，不用播报腔。',
+  };
+  return styles[artistId] ?? '像和朋友自然聊天，轻松清楚，不用播报腔。';
+}
+export function defaultServiceVoice(artistId: string, catalog: VoiceCatalog): ServiceVoice | undefined {
+  const preset = artistVoicePreset(artistId, catalog);
+  if (preset) return preset.choice;
   // Custom artists start from the service's declared default, never the
   // voice assigned to the visual template they selected.
   for (const p of catalog.providers) {
@@ -116,24 +144,25 @@ export async function connectVoiceCatalog(base: string, signal: AbortSignal, fet
 }
 
 const bounded = (v: number, low: number, high: number, fallback = 1) => Number.isFinite(v) ? Math.min(high, Math.max(low, v)) : fallback;
-export function synthesisBody(choice: ServiceVoice, line: string, rate: number, pitch: number) {
+export function synthesisBody(choice: ServiceVoice, line: string, rate: number, pitch: number, style = '') {
   const content = line.trim();
   if (!content || content.length > 1000) throw new Error('这段朗读需要 1～1000 字。');
   const speed = bounded(rate, .65, 1.25), tune = Math.round((bounded(pitch, .7, 1.3) - 1) * 10);
   let options: Record<string, unknown>;
   switch (choice.provider) {
     case 'minimax': options = { speed, vol: 1, pitch: tune, format: 'mp3', sampleRate: 32000, bitrate: 128000, languageBoost: 'Chinese', outputFormat: 'hex' }; break;
-    case 'volcengine': options = { apiVersion: 'v3', v3Model: choice.model, speed: Math.round((speed - 1) * 100), vol: 0, pitch: tune, format: 'mp3', sampleRate: 24000 }; break;
+    case 'volcengine': options = { apiVersion: 'v3', v3Model: choice.model, speed: Math.round((speed - 1) * 100), vol: 0, pitch: tune, format: 'mp3', sampleRate: 24000,
+      ...(choice.model === 'seed-tts-2.0-expressive' && style ? { contextTexts: style.slice(0, 200) } : {}) }; break;
     case 'aliyun': options = /^cosyvoice/i.test(choice.model) ? { rate: speed, pitch: bounded(pitch, .7, 1.3), volume: 50, format: 'mp3', sampleRate: 22050 } : { languageType: 'Chinese' }; break;
     case 'sensetime': case 'sensetimev5': options = { speed, volume: 0, pitch: tune, format: 'mp3', sampleRate: 24000, language: 'zh' }; break;
     default: throw new Error('不支持这个语音平台。');
   }
   return { provider: choice.provider, model: choice.model, voice: choice.voice, text: content, options };
 }
-export async function synthesizeVoice(base: string, choice: ServiceVoice, line: string, rate: number, pitch: number, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<ArrayBuffer> {
+export async function synthesizeVoice(base: string, choice: ServiceVoice, line: string, rate: number, pitch: number, signal: AbortSignal, fetcher: typeof fetch = fetch, style = ''): Promise<ArrayBuffer> {
   const response = await jsonResponse(await fetcher(`${serviceUrl(base)}/api/tts`, {
     method: 'POST', signal, credentials: 'omit', headers: { 'Content-Type': 'application/json', 'X-Client-Name': 'Afterglow' },
-    body: JSON.stringify(synthesisBody(choice, line, rate, pitch)),
+    body: JSON.stringify(synthesisBody(choice, line, rate, pitch, style)),
   }));
   const audio = record(record(response).audio), encoded = audio.base64;
   if (!['mp3', 'wav', 'flac', 'ogg'].includes(text(audio.format)) || typeof encoded !== 'string' || !encoded.length || encoded.length > 12_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) throw new Error('音色服务没有返回可播放的音频。');

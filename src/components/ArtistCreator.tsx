@@ -79,7 +79,7 @@ export function ArtistCreator({ onCreate, onPreview }: { onCreate: (artist: Arti
       <label>简介<textarea maxLength={4000} value={draft.background} placeholder="背景与经历；没填写的部分保持未设定" onChange={e => change({ background: e.target.value })}/></label>
       <label>第一句会说什么<textarea required maxLength={300} value={draft.observation} onChange={e => change({ observation: e.target.value })}/></label>
       <details className="artist-extra"><summary>补充资料与交流偏好</summary><label>导入的资料／来源<textarea maxLength={12000} value={draft.sourceNotes} placeholder="上传文字会放在这里。用户提供的资料尚未核验，不会自动成为真实代表作。" onChange={e => change({ sourceNotes: e.target.value })}/></label><label>交流中坚持的一点<input maxLength={300} value={draft.rule} onChange={e => change({ rule: e.target.value })}/></label></details>
-      <p className="form-note">当前保存到这台设备，没有上传到外部服务。文字用于本地人设档案和预写对白；大模型回复、资料核验与新形象生成尚未接通。角色卡仅含文字与示例形象选择，不含参考图、声音或聊天记录。</p>
+      <p className="form-note">创建时保存到这台设备。配置 NIA 后，对话会发送已确认的名字、类型、创作方向、性格、简介与近期对白；原始资料和参考图不随请求发送。资料核验与新形象生成尚未接通。导出的角色卡不含参考图、声音或聊天记录。</p>
       <div className="artist-create-actions"><button type="button" className="text-btn" onClick={download}><Download size={14}/>下载角色卡／示例</button><button type="button" className="text-btn" disabled={!draft.name.trim()} onClick={() => onPreview(draftToArtist(draft, 'preview'))}><Volume2 size={14}/>试听当前声音</button><button type="submit" className="button" disabled={reading}>确认人设，加入来宾册</button></div>
     </div>
   </form>;

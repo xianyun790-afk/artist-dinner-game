@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-09",
+  "method": "Same generated reply and same voice/rate/pitch; streaming first-clause and whole-reply synthesis overlap for this diagnostic. Audio-ready excludes browser decode and device output. Old serial includes its removed 600 ms pause. Three small samples, not a service SLA.",
+  "voice": "MiniMax speech-2.8-turbo / Gentleman",
+  "samples": [
+    {
+      "firstClauseMs": 840,
+      "generationMs": 1008,
+      "firstAudioReadyMs": 1936,
+      "wholeReplyTtsMs": 2055,
+      "oldSerialWith600msPause": 3664,
+      "firstChars": 33,
+      "totalChars": 102
+    },
+    {
+      "firstClauseMs": 584,
+      "generationMs": 748,
+      "firstAudioReadyMs": 2328,
+      "wholeReplyTtsMs": 3010,
+      "oldSerialWith600msPause": 4358,
+      "firstChars": 17,
+      "totalChars": 43
+    },
+    {
+      "firstClauseMs": 642,
+      "generationMs": 643,
+      "firstAudioReadyMs": 4549,
+      "wholeReplyTtsMs": 6038,
+      "oldSerialWith600msPause": 7281,
+      "firstChars": 37,
+      "totalChars": 55
+    }
+  ]
+}

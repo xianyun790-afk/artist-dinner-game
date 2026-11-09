@@ -1,0 +1,72 @@
+[
+  {
+    "artist": "莫奈",
+    "title": "莫奈 · 沉静叙事",
+    "description": "柔和、有阅历，留一点思索的停顿。",
+    "rate": 0.94,
+    "pitch": 0.97,
+    "choice": {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "voice": "Chinese (Mandarin)_Lyrical_Voice"
+    },
+    "ms": 676,
+    "bytes": 46644
+  },
+  {
+    "artist": "梵高",
+    "title": "梵高 · 热切坦诚",
+    "description": "有劲、有温度，像想到什么就认真说出来。",
+    "rate": 1,
+    "pitch": 0.98,
+    "choice": {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "voice": "Chinese (Mandarin)_Unrestrained_Young_Man"
+    },
+    "ms": 1421,
+    "bytes": 43188
+  },
+  {
+    "artist": "达利",
+    "title": "达利 · 机敏戏剧感",
+    "description": "咬字鲜明、节奏轻快，让一个小意外自然出现。",
+    "rate": 1.04,
+    "pitch": 1.04,
+    "choice": {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "voice": "Chinese (Mandarin)_Radio_Host"
+    },
+    "ms": 822,
+    "bytes": 42612
+  },
+  {
+    "artist": "欧姬芙",
+    "title": "欧姬芙 · 成熟克制",
+    "description": "清楚、从容，短句也有自己的分量。",
+    "rate": 0.95,
+    "pitch": 1,
+    "choice": {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "voice": "Chinese (Mandarin)_Wise_Women"
+    },
+    "ms": 597,
+    "bytes": 42036
+  },
+  {
+    "artist": "林照",
+    "title": "林照 · 细腻亲近",
+    "description": "轻柔、耐心，像坐在旁边听完一个故事。",
+    "rate": 0.98,
+    "pitch": 1.02,
+    "choice": {
+      "provider": "minimax",
+      "model": "speech-2.8-turbo",
+      "voice": "Chinese (Mandarin)_Gentle_Senior"
+    },
+    "ms": 556,
+    "bytes": 46644
+  }
+]

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { signNiaToken, buildPersonaPrompt, generateNiaReply } from '../server/nia.mjs';
+import { artistPersonas, personaRules } from '../server/personas.mjs';
 const config = { accessKey: 'test-access', secretKey: 'test-only-secret', model: 'test-model' };
 function socketMock(scenario = 'ok') {
   class Mock extends EventTarget {
@@ -39,7 +40,9 @@ test('JWT is server-signed with short expiry and does not embed the secret', () 
 });
 test('NIA uses the documented session lifecycle and returns one completed text without a duplicate ending', async () => {
   const Socket = socketMock();
-  assert.equal(await generateNiaReply(options, Socket), '你好。我在听。');
+  const updates = [];
+  assert.equal(await generateNiaReply({ ...options, onText: text => updates.push(text) }, Socket), '你好。我在听。');
+  assert.deepEqual(updates, ['你好。', '你好。我在听。']);
   const socket = Socket.instances[0];
   assert.deepEqual(socket.sent.map(m => m.type), ['CreateSession', 'ConfigPipeline', 'StartServing', 'PostMultimodalGenerate']);
   assert.equal(socket.sent[1].custom_config.tts.enabled, false);
@@ -54,6 +57,19 @@ test('group prompt and wire context include only supplied group messages, with n
   assert.equal(socket.sent[1].custom_config.fn_call, undefined);
   assert.deepEqual(JSON.parse(socket.sent[3].text), { recentConversation: history, playerMessage: '你好' });
   assert.match(buildPersonaPrompt(options.persona), /没有任何操作工具/);
+});
+test('each built-in prompt receives only its own authored persona, while a namesake custom artist keeps an independent identity', () => {
+  for (const [id, card] of Object.entries(artistPersonas)) {
+    const prompt = buildPersonaPrompt({ id, name: card.name });
+    assert.ok(prompt.includes(card.core)); assert.ok(prompt.includes(card.boundary));
+    assert.match(prompt, /examples 仅为虚构语气示例/);
+    for (const [otherId, other] of Object.entries(artistPersonas)) if (otherId !== id) assert.ok(!prompt.includes(other.core));
+  }
+  const custom = { id: 'custom-monet', name: '莫奈', personality: '爱讲笑话的原创画家' };
+  assert.equal(personaRules(custom), null);
+  const prompt = buildPersonaPrompt(custom);
+  assert.ok(prompt.includes(custom.personality)); assert.ok(!prompt.includes(artistPersonas.monet.core));
+  assert.match(prompt, /不借用任何内置角色的背景/);
 });
 test('interrupt during generation closes the session and cannot return a late reply', async () => {
   const Socket = socketMock('hang'), controller = new AbortController();

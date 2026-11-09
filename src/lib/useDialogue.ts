@@ -19,18 +19,23 @@ export function useDialogue() {
     finally { clearTimeout(timer); }
   }, []);
   useEffect(() => { void refresh(); return () => { metadata.current?.abort(); metadata.current = null; }; }, [refresh]);
-  const reply = useCallback(async (artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group', fallback: string, signal: AbortSignal) => {
-    if (!base) return fallback;
+  const reply = useCallback(async (artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group', fallback: string, signal: AbortSignal, onSentence?: (text: string) => void) => {
+    if (!base) { onSentence?.(fallback); return fallback; }
     setError(''); const controller = new AbortController();
     const cancel = () => controller.abort(signal.reason); if (signal.aborted) cancel(); else signal.addEventListener('abort', cancel, { once: true });
     const timer = setTimeout(() => controller.abort(), 40000);
+    let delivered = '';
     try {
-      const line = await requestDialogue(base, dialogueBody(artist, text, history, mode), controller.signal);
+      const line = await requestDialogue(base, dialogueBody(artist, text, history, mode), controller.signal, fetch, onSentence ? sentence => {
+        delivered += sentence; onSentence(sentence);
+      } : undefined);
       if (signal.aborted) throw new DOMException('已打断', 'AbortError');
       setLastSource('NIA 实时生成'); setConnection('ready'); return line;
     } catch (e) {
       if (signal.aborted) throw e;
-      setLastSource('本地剧本回退'); setError('NIA 暂时没有回复，本次使用本地剧本；可以在设置中重连。'); return fallback;
+      // Never repeat already queued speech or replace it with unrelated fallback.
+      if (delivered) { setLastSource('NIA 部分回复'); setError('NIA 回复中断，已保留收到的部分；可以接着聊。'); return delivered; }
+      setLastSource('本地剧本回退'); setError('NIA 暂时没有回复，本次使用本地剧本；可以在设置中重连。'); onSentence?.(fallback); return fallback;
     } finally { clearTimeout(timer); signal.removeEventListener('abort', cancel); }
   }, []);
   return { configured: !!base, connection, model, error, lastSource, refresh, reply };
