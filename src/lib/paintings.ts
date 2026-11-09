@@ -9,6 +9,8 @@ export interface Painting {
   artist: string;
   year: string;
   image: string;
+  width: number;
+  height: number;
   museum: string;
   sourceUrl: string;
   imageSourceUrl: string;

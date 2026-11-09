@@ -72,7 +72,7 @@ export function useSpeech() {
     const controller = new AbortController(); request.current = controller;
     const cancel = () => { if (turn === seq.current) stop(); else controller.abort(); };
     if (signal?.aborted) controller.abort(); else signal?.addEventListener('abort', cancel, { once: true });
-    let firstAudio = true;
+    let firstAudio = true, playbackFailed = false;
     const markAudio = () => { if (firstAudio) { firstAudio = false; setFirstAudioMs(Math.round(performance.now() - startedAt)); } };
     const active = () => turn === seq.current && !controller.signal.aborted;
     const metadata = voiceEngineFor(a) === 'service'
@@ -116,27 +116,27 @@ export function useSpeech() {
         if (buffer) {
           const ctx = context.current;
           if (!ctx || ctx.state !== 'running') {
-            showCaption(); setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); finished(); return;
+            playbackFailed = true; showCaption(); setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); finished(); return;
           }
           const node = ctx.createBufferSource(); node.buffer = buffer; node.connect(ctx.destination); source.current = node;
           node.onended = () => { node.disconnect(); if (source.current === node) source.current = null; finished(); };
           try { node.start(); showCaption(); markAudio(); setLoading(false); setSpeaking(true); setStatus(`正在朗读 · ${label}`); }
-          catch { showCaption(); node.disconnect(); source.current = null; finished(); }
+          catch { playbackFailed = true; showCaption(); node.disconnect(); source.current = null; finished(); }
           return;
         }
-        if (!available) { showCaption(); setError('这段声音暂时不可用，可继续看字幕。'); finished(); return; }
+        if (!available) { playbackFailed = true; showCaption(); setError('这段声音暂时不可用，可继续看字幕。'); finished(); return; }
         const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-CN'; u.rate = a.rate; u.pitch = a.pitch;
         const selected = voices.find(v => v.voiceURI === a.voiceURI) ?? voices.find(v => /zh[-_]CN/i.test(v.lang)) ?? voices.find(v => /^zh/i.test(v.lang));
         if (selected) u.voice = selected;
         u.onstart = () => { if (active()) { showCaption(); markAudio(); setLoading(false); setSpeaking(true); setStatus(serviceFailed ? '正在使用设备语音回退' : '正在用设备音色朗读'); } };
         u.onend = finished;
-        u.onerror = e => { if (active() && !['interrupted', 'canceled'].includes(e.error)) { showCaption(); setError('设备声音暂时不可用，字幕已保留。'); } finished(); };
+        u.onerror = e => { playbackFailed = true; if (active() && !['interrupted', 'canceled'].includes(e.error)) { showCaption(); setError('设备声音暂时不可用，字幕已保留。'); } finished(); };
         utterance.current = u;
-        try { window.speechSynthesis.speak(u); } catch { showCaption(); setError('声音暂时不可用，可继续看字幕。'); finished(); }
+        try { window.speechSynthesis.speak(u); } catch { playbackFailed = true; showCaption(); setError('声音暂时不可用，可继续看字幕。'); finished(); }
       }),
     });
     // A stopped queue resolves even when an old fetch/decode finishes late.
-    const done = queue.done.catch(() => { if (active()) setError('声音暂时不可用，可继续看字幕。'); }).finally(() => {
+    const done = queue.done.then(() => active() && !playbackFailed && !firstAudio).catch(() => { if (active()) setError('声音暂时不可用，可继续看字幕。'); return false; }).finally(() => {
       signal?.removeEventListener('abort', cancel);
       if (turn === seq.current) { setLoading(false); setSpeaking(false); setStatus(`已播完 · ${serviceFailed ? '设备语音回退' : label || '设备音色'}`); if (request.current === controller) request.current = null; }
     });

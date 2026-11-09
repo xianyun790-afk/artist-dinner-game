@@ -15,6 +15,10 @@ export interface Artist {
 export type ArtistVoiceSettings = Pick<Artist, 'voiceURI' | 'rate' | 'pitch' | 'voiceEngine' | 'serviceVoice'>;
 export interface Message { id: string; who: 'artist' | 'player'; text: string; action?: string }
 export interface Memory { id: string; kind: string; text: string; night: number; workId?: string }
+export interface PaintingMemory {
+  id: string; paintingId: string; speakerId: string; question: string;
+  explanation: string; createdAt: string; night: number;
+}
 export interface PersonState {
   node: Node; mood: Mood; interest: number; irritation: number; evidence: string[];
   messages: Message[]; memories: Memory[]; lastResult?: string; mark?: Mark;
@@ -31,6 +35,7 @@ export interface Save {
   customArtists: Artist[]; people: Record<string, PersonState>; works: Work[];
   voiceSettings: Record<string, ArtistVoiceSettings>;
   groupChats?: GroupChat[];
+  paintingMemories?: PaintingMemory[];
   muted: boolean; activeId: string | null; ended: boolean;
 }
 export interface Choice { id: string; text: string; hint?: string; icon?: 'art' | 'quiet' | 'talk' }
