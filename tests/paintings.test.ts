@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { declinesPaintingDisplay, findMentionedPainting, paintingFromPlayer, paintingFromReply, starryNight, type PaintingSceneState } from '../src/lib/paintings.ts';
+import { declinesPaintingDisplay, findMentionedPainting, paintingFromPlayer, paintingFromReply, starryNight, waterLilies, type PaintingSceneState } from '../src/lib/paintings.ts';
 
 test('named Starry Night mentions support Chinese aliases and English title formatting', () => {
   for (const text of ['聊聊《星月夜》', '星月夜为什么没有月亮？', '梵高的星夜', '我想看“星 月 夜”', 'Tell me about “THE   STARRY NIGHT”.', 'Starry Night']) {
@@ -17,6 +17,28 @@ test('entering the painting is automatic and ordinary follow-ups keep the scene'
   assert.equal(paintingFromPlayer(scene, '那棵柏树呢？'), scene);
   assert.equal(paintingFromReply(scene, '星月夜里的柏树'), scene);
   assert.equal(paintingFromReply(table, '我们说到《星月夜》').painting, starryNight);
+});
+
+test('Monet Water Lilies has its own real artwork and respects declined display', () => {
+  for (const text of ['莫奈的睡莲', '聊聊《睡莲》', '水上的睡 莲', 'Water Lilies', 'Nymphéas']) {
+    assert.equal(findMentionedPainting(text), waterLilies, text);
+  }
+  for (const text of ['先别展示睡莲', '不要看《睡莲》', '睡莲先不要展示']) {
+    assert.equal(declinesPaintingDisplay(text), true, text);
+    assert.equal(findMentionedPainting(text), null, text);
+  }
+  assert.equal(findMentionedPainting('我不喜欢睡莲的颜色'), waterLilies);
+  assert.equal(findMentionedPainting('莫奈《睡莲池》'), null);
+  assert.equal(findMentionedPainting('Bridge over a Pond of Water Lilies'), null);
+});
+
+test('players can switch paintings by the last named work while commentary keeps the current scene', () => {
+  const starry: PaintingSceneState = { painting: starryNight, suppressed: false };
+  const lilies = paintingFromPlayer(starry, '星月夜看完了，看看睡莲');
+  assert.equal(lilies.painting, waterLilies);
+  assert.equal(paintingFromReply(lilies, '这跟星月夜的色彩不同'), lilies);
+  assert.equal(paintingFromPlayer(lilies, '睡莲之后再看星月夜').painting, starryNight);
+  assert.equal(paintingFromPlayer({ painting: null, suppressed: true }, '再看看睡莲').painting, waterLilies);
 });
 
 test('leaving suppresses late speech and ordinary follow-ups until a new explicit invitation', () => {

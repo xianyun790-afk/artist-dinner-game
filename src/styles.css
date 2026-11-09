@@ -121,6 +121,10 @@ html,body,#root{width:100%;height:100%;background:#fff}
 .behind-painting{visibility:hidden;pointer-events:none}
 .painting-scene{position:fixed;inset:0;z-index:90;overflow:hidden;background:#101c2a;isolation:isolate;animation:painting-enter .7s ease-out}
 .painting-world{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 40%}
+.painting-subtitle-shade{position:absolute;inset:62% 0 0;pointer-events:none;background:linear-gradient(transparent,#07112685)}
+.painting-subtitle{position:absolute;left:50%;bottom:max(44px,calc(env(safe-area-inset-bottom) + 28px));transform:translateX(-50%);width:min(860px,calc(100% - 64px));text-align:center;color:#fff;pointer-events:none;text-shadow:0 2px 7px #000c,0 1px 2px #0009}
+.painting-subtitle>p{margin:0;font-size:clamp(15px,1.35vw,21px);font-weight:400;line-height:1.8;letter-spacing:.025em;overflow-wrap:anywhere;text-wrap:pretty}
+@media(max-width:760px){.painting-subtitle{width:calc(100% - 36px);bottom:max(28px,calc(env(safe-area-inset-bottom) + 20px))}.painting-subtitle>p{font-size:15px;line-height:1.85}}
 .painting-leave{position:absolute;top:max(22px,env(safe-area-inset-top));right:max(24px,env(safe-area-inset-right));width:42px;height:42px;display:grid;place-items:center;border-radius:50%;background:#0b18292b;border:1px solid #ffffff47;color:#fff;backdrop-filter:blur(6px);opacity:.65;transition:opacity .2s,background .2s}
 .painting-leave:hover,.painting-leave:focus-visible{opacity:1;background:#0b182966}.painting-leave:focus-visible{outline:1px solid #ffffffa6;outline-offset:4px}
 .painting-scene-error{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:15px 22px;border-radius:10px;background:#102035e8;color:#f0f1ed;font-size:13px;line-height:1.8;text-align:center;max-width:calc(100% - 40px)}

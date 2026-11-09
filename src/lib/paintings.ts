@@ -22,6 +22,20 @@ export const starryNight: Painting = {
   imageSourceUrl: 'https://commons.wikimedia.org/wiki/File:Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
 };
 
+export const waterLilies: Painting = {
+  id: 'water-lilies',
+  title: '睡莲',
+  englishTitle: 'Water Lilies',
+  artist: '克洛德·莫奈',
+  year: '1906',
+  image: '/artworks/water-lilies.jpg',
+  museum: '芝加哥艺术博物馆',
+  sourceUrl: 'https://www.artic.edu/artworks/16568/water-lilies',
+  imageSourceUrl: 'https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Water_Lilies_-_1933.1157_-_Art_Institute_of_Chicago.jpg',
+};
+
+const paintingTitle = /星月夜|星夜|\b(?:the\s+)?starry\s+night\b|睡莲|\bwater\s+lilies\b|\bnymph[eé]as\b/giu;
+
 function normalizeMention(text: string): string {
   return text.normalize('NFKC')
     .replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '$1')
@@ -33,6 +47,7 @@ function relevantText(text: string): string {
   return normalizeMention(text)
     .replace(/罗[讷纳]河[^，。！？,!?；;]{0,8}?星(?:月)?夜/gu, '')
     .replace(/\b(?:the\s+)?starry\s+night\s+over\s+the\s+rh[oô]ne\b/giu, '')
+    .replace(/睡莲池|睡莲和日本桥|\bbridge\s+over\s+(?:a\s+)?pond\s+of\s+water\s+lilies\b/giu, '')
     .replace(/星夜(?:兼程|赶路|行军|疾行|出发|驰援)|披星夜行/gu, '');
 }
 
@@ -46,7 +61,7 @@ export function declinesPaintingDisplay(text: string): boolean {
     const declinePictureAfter = /(?:图片|画面|画作|原作|配图|插图|弹窗|这幅画|这张画|那幅画|那张画)(?:先|暂时|现在)?(?:不要|不用|不必|无需|别|不需要)(?:你|再|先|自动|直接|给我|帮我|\s){0,3}(?:展示|显示|弹出|打开|放出|放大|看)/u.test(clause);
     const declinePopup = /(?:不要|不用|不必|无需|先别|别|不想|不需要)(?:你|再|先|自动|直接|给我|帮我|\s){0,3}(?:弹窗|配图)/u.test(clause);
     if (declinePicture || declinePictureAfter || declinePopup) return true;
-    for (const mention of clause.matchAll(/星月夜|星夜|\b(?:the\s+)?starry\s+night\b/giu)) {
+    for (const mention of clause.matchAll(paintingTitle)) {
       const before = clause.slice(0, mention.index).slice(-30);
       const after = clause.slice(mention.index! + mention[0].length, mention.index! + mention[0].length + 30);
       // Respect a request not to show a picture, without censoring disagreement
@@ -62,7 +77,9 @@ export function declinesPaintingDisplay(text: string): boolean {
 /** Match a named work, rather than guessing from a general topic such as stars. */
 export function findMentionedPainting(text: string): Painting | null {
   if (declinesPaintingDisplay(text)) return null;
-  return /星月夜|星夜|\b(?:the\s+)?starry\s+night\b/iu.test(relevantText(text)) ? starryNight : null;
+  const mention = [...relevantText(text).matchAll(paintingTitle)].at(-1);
+  if (!mention) return null;
+  return /睡莲|water\s+lilies|nymph[eé]as/iu.test(mention[0]) ? waterLilies : starryNight;
 }
 
 export interface PaintingSceneState { painting: Painting | null; suppressed: boolean }

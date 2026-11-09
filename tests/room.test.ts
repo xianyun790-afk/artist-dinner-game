@@ -6,6 +6,8 @@ const guests=artists.slice(0,4);
 test('anyone can speak at the table without first selecting an artist',()=>{
   assert.equal(responderFor('今天好累',guests,null,null)?.id,'georgia');
   assert.equal(responderFor('日落真美',guests,null,null)?.id,'monet');
+  assert.equal(responderFor('看看莫奈的睡莲',guests,null,null)?.id,'monet');
+  assert.equal(responderFor('Water Lilies',guests,null,null)?.id,'monet');
   assert.equal(responderFor('喜欢蓝色',guests,null,null)?.id,'vincent');
   assert.equal(responderFor('聊聊星月夜',guests,null,null)?.id,'vincent');
   assert.equal(responderFor('The Starry Night',guests,null,null)?.id,'vincent');

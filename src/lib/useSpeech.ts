@@ -9,6 +9,7 @@ export function useSpeech() {
   const [speaking, setSpeaking] = useState(false), [loading, setLoading] = useState(false);
   const [error, setError] = useState(''), [status, setStatus] = useState('');
   const [firstAudioMs, setFirstAudioMs] = useState<number | null>(null);
+  const [caption, setCaption] = useState<{ artistId: string; text: string } | null>(null);
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [connection, setConnection] = useState<'off' | 'connecting' | 'ready' | 'error'>(serviceBase ? 'connecting' : 'off');
   const [connectionError, setConnectionError] = useState('');
@@ -24,7 +25,7 @@ export function useSpeech() {
     if (available) window.speechSynthesis.cancel();
     utterance.current = null;
   }, [available]);
-  const stop = useCallback(() => { release(); setSpeaking(false); setLoading(false); setStatus(''); }, [release]);
+  const stop = useCallback(() => { release(); setSpeaking(false); setLoading(false); setStatus(''); setCaption(null); }, [release]);
   // Called synchronously from a click/submit, before the asynchronous TTS request.
   const unlock = useCallback(() => {
     if (!serviceBase) return;
@@ -107,28 +108,31 @@ export function useSpeech() {
       },
       play: (buffer, text) => new Promise<void>(resolve => {
         if (!active()) { resolve(); return; }
+        // Follow the single playback queue, rather than text arriving ahead
+        // from the model. Keep the last clause readable after speech finishes.
+        const showCaption = () => { if (active()) setCaption({ artistId: a.id, text }); };
         const finished = () => { controller.signal.removeEventListener('abort', finished); resolve(); };
         controller.signal.addEventListener('abort', finished, { once: true });
         if (buffer) {
           const ctx = context.current;
           if (!ctx || ctx.state !== 'running') {
-            setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); finished(); return;
+            showCaption(); setLoading(false); setError('请点击试听或说话按钮启用声音；本次字幕已保留。'); finished(); return;
           }
           const node = ctx.createBufferSource(); node.buffer = buffer; node.connect(ctx.destination); source.current = node;
           node.onended = () => { node.disconnect(); if (source.current === node) source.current = null; finished(); };
-          try { node.start(); markAudio(); setLoading(false); setSpeaking(true); setStatus(`正在朗读 · ${label}`); }
-          catch { node.disconnect(); source.current = null; finished(); }
+          try { node.start(); showCaption(); markAudio(); setLoading(false); setSpeaking(true); setStatus(`正在朗读 · ${label}`); }
+          catch { showCaption(); node.disconnect(); source.current = null; finished(); }
           return;
         }
-        if (!available) { setError('这段声音暂时不可用，可继续看字幕。'); finished(); return; }
+        if (!available) { showCaption(); setError('这段声音暂时不可用，可继续看字幕。'); finished(); return; }
         const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-CN'; u.rate = a.rate; u.pitch = a.pitch;
         const selected = voices.find(v => v.voiceURI === a.voiceURI) ?? voices.find(v => /zh[-_]CN/i.test(v.lang)) ?? voices.find(v => /^zh/i.test(v.lang));
         if (selected) u.voice = selected;
-        u.onstart = () => { if (active()) { markAudio(); setLoading(false); setSpeaking(true); setStatus(serviceFailed ? '正在使用设备语音回退' : '正在用设备音色朗读'); } };
+        u.onstart = () => { if (active()) { showCaption(); markAudio(); setLoading(false); setSpeaking(true); setStatus(serviceFailed ? '正在使用设备语音回退' : '正在用设备音色朗读'); } };
         u.onend = finished;
-        u.onerror = e => { if (active() && !['interrupted', 'canceled'].includes(e.error)) setError('设备声音暂时不可用，字幕已保留。'); finished(); };
+        u.onerror = e => { if (active() && !['interrupted', 'canceled'].includes(e.error)) { showCaption(); setError('设备声音暂时不可用，字幕已保留。'); } finished(); };
         utterance.current = u;
-        try { window.speechSynthesis.speak(u); } catch { setError('声音暂时不可用，可继续看字幕。'); finished(); }
+        try { window.speechSynthesis.speak(u); } catch { showCaption(); setError('声音暂时不可用，可继续看字幕。'); finished(); }
       }),
     });
     // A stopped queue resolves even when an old fetch/decode finishes late.
@@ -141,6 +145,6 @@ export function useSpeech() {
   const play = useCallback((text: string, a: Artist) => {
     const stream = startStream(a); stream.push(text); stream.end(); return stream.done;
   }, [startStream]);
-  return { voices, speaking, loading, error, status, firstAudioMs, play, startStream, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
+  return { voices, speaking, loading, error, status, firstAudioMs, caption, play, startStream, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
 }
 export type SpeechController = ReturnType<typeof useSpeech>;
