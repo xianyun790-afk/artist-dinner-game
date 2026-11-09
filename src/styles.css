@@ -141,7 +141,7 @@ html,body,#root{width:100%;height:100%;background:#fff}
 .painting-object::after{opacity:0;transition:opacity 1s .25s,border-width 1.35s cubic-bezier(.22,.7,.18,1)}
 .painting-scene{transition:background 1.1s}
 .painting-scene.is-framing{background:#fff}
-.is-framing .painting-object{--frame-rim:clamp(30px,5vw,64px);--art-width:min(72vw,calc((100dvh - 240px)*var(--art-ratio)));width:calc(var(--art-width) + var(--frame-rim)*2);height:calc(var(--art-width)/var(--art-ratio) + var(--frame-rim)*2);transform:translate(-50%,-53%)}
+.is-framing .painting-object{--frame-rim:clamp(22.5px,3.75vw,48px);--art-width:min(54vw,calc((75dvh - 180px)*var(--art-ratio)));width:calc(var(--art-width) + var(--frame-rim)*2);height:calc(var(--art-width)/var(--art-ratio) + var(--frame-rim)*2);transform:translate(-50%,-53%)}
 .is-framing .painting-object::after{opacity:1}
 .is-framing .painting-subtitle,.is-framing .painting-subtitle-shade{opacity:0;transition:opacity .4s}
 .is-framing .painting-leave{color:#8e918b;border-color:#dedfd9;background:#fff9;backdrop-filter:none}
@@ -169,5 +169,5 @@ html,body,#root{width:100%;height:100%;background:#fff}
 .painting-memories+.memory-list{border-top:1px solid #eee}
 .painting-memories+.memory-list:empty{display:none}
 .table-memory-notes{margin:0 28px 28px;border-top:1px solid #eeeee8;padding-top:16px}.table-memory-notes>summary{font-size:11px;color:#9ca191;cursor:pointer}.table-memory-notes .memory-list{padding:0}
-@media(max-width:760px){.room-memory-button{right:max(128px,calc(env(safe-area-inset-right) + 112px))}.room-group-status{max-width:calc(100% - 204px)}.is-framing .painting-object{--art-width:min(70vw,calc((100dvh - 180px)*var(--art-ratio)));--frame-rim:26px}.painting-memories{padding:20px}.painting-memory-grid{grid-template-columns:1fr;gap:28px}.painting-memory-preview{height:260px}.painting-memory-preview .framed-art{width:min(100%,calc(190px * var(--art-ratio) + 52px))}}
+@media(max-width:760px){.room-memory-button{right:max(128px,calc(env(safe-area-inset-right) + 112px))}.room-group-status{max-width:calc(100% - 204px)}.is-framing .painting-object{--art-width:min(52.5vw,calc((75dvh - 135px)*var(--art-ratio)));--frame-rim:19.5px}.painting-memories{padding:20px}.painting-memory-grid{grid-template-columns:1fr;gap:28px}.painting-memory-preview{height:260px}.painting-memory-preview .framed-art{width:min(100%,calc(190px * var(--art-ratio) + 52px))}}
 @media(prefers-reduced-motion:reduce){.painting-object,.painting-object::after,.painting-scene,.is-filing .painting-object,.is-framing .painting-subtitle,.is-framing .painting-subtitle-shade{transition:none}.painting-keepsake{animation:none}.is-filing .painting-object{transform:translate(-50%,-53%)}}
