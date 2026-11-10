@@ -47,9 +47,10 @@ export function createSpeechQueue<T>(options: {
   };
 }
 
-// Prefer a natural clause of 12–48 characters, rather than synthesizing tokens.
-// Short replies still flush immediately when the model finishes.
-export function speechParts(text: string, final = false): { parts: string[]; rest: string } {
+// Start promptly, then preserve longer complete thoughts instead of repeatedly
+// restarting the voice in the middle of a sentence. Never synthesize tokens.
+export function speechParts(text: string, final = false, maxChars = 48): { parts: string[]; rest: string } {
+  const limit = Math.max(48, Math.min(96, maxChars));
   const parts: string[] = [];
   let rest = text;
   while (rest.length) {
@@ -57,13 +58,13 @@ export function speechParts(text: string, final = false): { parts: string[]; res
     let cut = 0, match: RegExpExecArray | null;
     while ((match = boundary.exec(rest))) {
       const end = match.index + match[0].length;
-      if (end > 48) break;
+      if (end > limit) break;
       if (end >= 12 || final && end === rest.length) { cut = end; break; }
     }
-    if (!cut && rest.length >= 48) {
-      const window = rest.slice(12, 48);
+    if (!cut && rest.length >= limit) {
+      const window = rest.slice(12, limit);
       const comma = Math.max(window.lastIndexOf('，'), window.lastIndexOf(','), window.lastIndexOf('、'));
-      cut = comma >= 0 ? 13 + comma : 48;
+      cut = comma >= 0 ? 13 + comma : limit;
     }
     if (!cut) { if (final) { parts.push(rest); rest = ''; } break; }
     // Keep closing quotes attached when they are already available.

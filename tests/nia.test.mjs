@@ -71,6 +71,19 @@ test('each built-in prompt receives only its own authored persona, while a names
   assert.ok(prompt.includes(custom.personality)); assert.ok(!prompt.includes(artistPersonas.monet.core));
   assert.match(prompt, /不借用任何内置角色的背景/);
 });
+
+test('expression reaches the trusted prompt without replacing persona, scope or spoken-text rules', async () => {
+  const Socket = socketMock();
+  await generateNiaReply({ ...options, expression: 'firm' }, Socket);
+  const prompt = Socket.instances[0].sent[1].custom_config.system_prompt;
+  assert.match(prompt, /表达自己的边界/);
+  assert.match(prompt, /不把不同审美当成冒犯/);
+  assert.match(prompt, /不输出方向名称或表演标签/);
+  assert.match(prompt, /不能知道其他人的私聊或群聊/);
+  const baseline = buildPersonaPrompt(options.persona, 'private', 'calm');
+  assert.equal(buildPersonaPrompt(options.persona, 'private', 'UNTRUSTED-DIRECTION'), baseline);
+  assert.equal(buildPersonaPrompt(options.persona, 'private', '__proto__'), baseline);
+});
 test('interrupt during generation closes the session and cannot return a late reply', async () => {
   const Socket = socketMock('hang'), controller = new AbortController();
   const pending = generateNiaReply({ ...options, signal: controller.signal }, Socket);

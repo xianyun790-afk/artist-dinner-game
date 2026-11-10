@@ -50,3 +50,12 @@ test('sentence boundaries preserve all characters, combine tiny clauses and flus
   assert.ok(long.parts.every(part => part.length <= 48));
   assert.equal(long.parts.join(''), '一'.repeat(140));
 });
+
+test('continuation sentences retain a complete thought beyond the first-audio chunk limit', () => {
+  const thought = '我想保留水面上那些很轻的变化，' + '一'.repeat(42) + '，让它们连在一起。';
+  assert.ok(thought.length > 48 && thought.length < 96);
+  assert.deepEqual(speechParts(thought, false, 96), { parts: [thought], rest: '' });
+  const unfinished = thought.slice(0, -1);
+  assert.deepEqual(speechParts(unfinished, false, 96), { parts: [], rest: unfinished });
+  assert.equal(speechParts(unfinished, true, 96).parts.join(''), unfinished);
+});

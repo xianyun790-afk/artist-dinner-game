@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { generateNiaReply, niaConfig } from './nia.mjs';
+import { dialogueInput } from './dialogueInput.mjs';
 const configFile = fileURLToPath(new URL('../.env.server.local', import.meta.url));
 if (existsSync(configFile)) process.loadEnvFile(configFile);
 const config = niaConfig();
@@ -10,21 +11,6 @@ let running = 0;
 function validOrigin(origin) {
   if (!origin) return true;
   try { const url = new URL(origin); return ['http:', 'https:'].includes(url.protocol) && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname); } catch { return false; }
-}
-function bodyData(input) {
-  if (!input || typeof input !== 'object' || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 400 || !['private', 'group'].includes(input.mode)) throw new Error('invalid');
-  const raw = input.persona;
-  if (!raw || typeof raw !== 'object' || typeof raw.name !== 'string' || !raw.name.trim()) throw new Error('invalid');
-  const persona = {};
-  for (const key of ['id', 'name', 'fullName', 'identityType', 'personality', 'bio', 'medium']) {
-    if (typeof raw[key] === 'string') persona[key] = raw[key].slice(0, 1000);
-  }
-  if (!Array.isArray(input.history) || input.history.length > 12) throw new Error('invalid');
-  const history = input.history.map(m => {
-    if (!m || !['player', 'artist'].includes(m.who) || typeof m.text !== 'string' || m.text.length > 2000) throw new Error('invalid');
-    return { who: m.who, ...(typeof m.name === 'string' ? { name: m.name.slice(0, 80) } : {}), text: m.text };
-  });
-  return { persona, history, text: input.text.trim(), mode: input.mode };
 }
 const server = createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -43,7 +29,7 @@ const server = createServer(async (req, res) => {
   try {
     const chunks = []; let size = 0;
     for await (const chunk of req) { size += chunk.length; if (size > 64000) { send(413, { error: '对话资料过长。' }); return; } chunks.push(chunk); }
-    let payload; try { payload = bodyData(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { send(400, { error: '对话内容格式不正确。' }); return; }
+    let payload; try { payload = dialogueInput(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { send(400, { error: '对话内容格式不正确。' }); return; }
     if (controller.signal.aborted) return;
     if (running >= 3) { send(429, { error: '正在处理其他对话，请稍后重试。' }); return; }
     running++; counted = true;

@@ -1,0 +1,23 @@
+{
+  "text": "边缘确实不清。我更在意的是，颜色在水里怎样连起来。",
+  "voice": "zh_male_m191_uranus_bigtts",
+  "measurement": "whole HTTP TTS response; excludes microphone, ASR, LLM and playback",
+  "samples": [
+    {
+      "model": "seed-tts-2.0-standard",
+      "status": 200,
+      "format": "mp3",
+      "audioBytes": 44589,
+      "elapsedMs": 1393,
+      "serverElapsedMs": 1230
+    },
+    {
+      "model": "seed-tts-2.0-expressive",
+      "status": 200,
+      "format": "mp3",
+      "audioBytes": 46509,
+      "elapsedMs": 1317,
+      "serverElapsedMs": 1271
+    }
+  ]
+}

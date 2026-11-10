@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Artist } from './types';
 import { createSpeechQueue } from './speechQueue';
-import { artistSpeechStyle, defaultServiceVoice, connectVoiceCatalog, synthesizeVoice, validateServiceVoice, voicesForModel, type VoiceCatalog } from './voiceService';
+import { artistSpeechStyle, defaultServiceVoice, connectVoiceCatalog, createVoiceSynthesizer, validateServiceVoice, voicesForModel, type VoiceCatalog } from './voiceService';
+import { expressionDirection, type ArtistExpression } from './artistExpression';
+import { createVoiceTiming, type VoiceInputTiming, type VoiceTurnTiming } from './voiceTiming';
 const serviceBase = (import.meta.env.VITE_VOICE_SERVICE_URL || '').trim();
 export const voiceEngineFor = (a: Artist) => a.voiceEngine ?? (a.voiceURI || !serviceBase ? 'device' : 'service');
 export function useSpeech() {
@@ -9,6 +11,9 @@ export function useSpeech() {
   const [speaking, setSpeaking] = useState(false), [loading, setLoading] = useState(false);
   const [error, setError] = useState(''), [status, setStatus] = useState('');
   const [firstAudioMs, setFirstAudioMs] = useState<number | null>(null);
+  const [timing, setTiming] = useState<VoiceTurnTiming>({});
+  const [currentExpression, setCurrentExpression] = useState<ArtistExpression>('calm');
+  const [timingScope, setTimingScope] = useState<'turn' | 'group-followup'>('turn');
   const [caption, setCaption] = useState<{ artistId: string; text: string } | null>(null);
   const [catalog, setCatalog] = useState<VoiceCatalog | null>(null);
   const [connection, setConnection] = useState<'off' | 'connecting' | 'ready' | 'error'>(serviceBase ? 'connecting' : 'off');
@@ -17,6 +22,7 @@ export function useSpeech() {
   const seq = useRef(0), utterance = useRef<SpeechSynthesisUtterance | null>(null);
   const request = useRef<AbortController | null>(null), catalogRequest = useRef<AbortController | null>(null);
   const context = useRef<AudioContext | null>(null), source = useRef<AudioBufferSourceNode | null>(null);
+  const synthesisCache = useRef(createVoiceSynthesizer());
   const available = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const release = useCallback(() => {
     seq.current++; request.current?.abort(); request.current = null;
@@ -34,6 +40,7 @@ export function useSpeech() {
   const refresh = useCallback((): Promise<VoiceCatalog | null> => {
     if (!serviceBase) return Promise.resolve(null);
     if (connectionTask.current) return connectionTask.current;
+    synthesisCache.current.clear();
     const controller = new AbortController(); catalogRequest.current = controller;
     setConnection('connecting'); setConnectionError('');
     const task = (async () => {
@@ -65,24 +72,31 @@ export function useSpeech() {
     update(); window.speechSynthesis.addEventListener('voiceschanged', update);
     return () => window.speechSynthesis.removeEventListener('voiceschanged', update);
   }, [available]);
-  useEffect(() => () => { release(); void context.current?.close(); }, [release]);
+  useEffect(() => () => { release(); synthesisCache.current.clear(); void context.current?.close(); }, [release]);
   const voiceFor = useCallback((a: Artist) => a.serviceVoice ?? (catalog ? defaultServiceVoice(a.id, catalog) : undefined), [catalog]);
-  const startStream = useCallback((a: Artist, signal?: AbortSignal, onCaption?: (text: string) => void) => {
-    stop(); setError(''); setFirstAudioMs(null); unlock(); const turn = seq.current, startedAt = performance.now();
+  const startStream = useCallback((a: Artist, signal?: AbortSignal, onCaption?: (text: string) => void, options?: { expression?: ArtistExpression; submittedAt?: number; inputTiming?: VoiceInputTiming; timingScope?: 'turn' | 'group-followup' }) => {
+    stop(); setError(''); setFirstAudioMs(null); setTiming({}); unlock(); const turn = seq.current;
+    const clock = createVoiceTiming(options?.submittedAt ?? performance.now(), options?.inputTiming);
+    const expression = options?.expression ?? 'calm';
+    setCurrentExpression(expression);
+    setTimingScope(options?.timingScope ?? 'turn');
+    const style = `${artistSpeechStyle(a.id)}${expressionDirection(expression)}`;
+    const rate = a.rate * (expression === 'firm' ? .97 : expression === 'warm' ? 1.02 : 1);
     const controller = new AbortController(); request.current = controller;
     const cancel = () => { if (turn === seq.current) stop(); else controller.abort(); };
     if (signal?.aborted) controller.abort(); else signal?.addEventListener('abort', cancel, { once: true });
     let firstAudio = true, playbackFailed = false;
-    const markAudio = () => { if (firstAudio) { firstAudio = false; setFirstAudioMs(Math.round(performance.now() - startedAt)); } };
+    const markAudio = () => { if (firstAudio) { firstAudio = false; clock.mark('firstAudioMs'); const snapshot = clock.snapshot(); setFirstAudioMs(snapshot.firstAudioMs ?? null); setTiming(snapshot); } };
     const active = () => turn === seq.current && !controller.signal.aborted;
     const metadata = voiceEngineFor(a) === 'service'
       ? connection === 'ready' && catalog ? Promise.resolve(catalog) : refresh()
       : Promise.resolve(null);
-    let label = '', serviceFailed = false;
+    let label = '', serviceFailed = false, segmentIndex = 0;
     const queue = createSpeechQueue<AudioBuffer | null>({
       signal: controller.signal,
       waiting: () => { if (active()) { setSpeaking(false); setLoading(true); setStatus('正在准备声音…'); } },
       prepare: async text => {
+        const index = segmentIndex++;
         if (voiceEngineFor(a) === 'device' || serviceFailed) return null;
         const liveCatalog = await metadata;
         if (!active()) return null;
@@ -98,9 +112,11 @@ export function useSpeech() {
         const abort = () => synthesis.abort(); controller.signal.addEventListener('abort', abort, { once: true });
         const timer = setTimeout(abort, 20000);
         try {
-          const audio = await synthesizeVoice(serviceBase, choice, text, a.rate, a.pitch, synthesis.signal, fetch, artistSpeechStyle(a.id));
+          const audio = await synthesisCache.current.synthesize(serviceBase, choice, text, rate, a.pitch, synthesis.signal, fetch, style);
           if (!active()) return null;
-          return context.current ? await context.current.decodeAudioData(audio) : null;
+          const buffer = context.current ? await context.current.decodeAudioData(audio) : null;
+          if (active() && buffer && index === 0) { clock.mark('firstPreparedMs'); setTiming(clock.snapshot()); }
+          return buffer;
         } catch {
           if (active()) { serviceFailed = true; setError('音色服务暂时不可用，本次改用设备语音；字幕已保留。'); }
           return null;
@@ -126,7 +142,7 @@ export function useSpeech() {
           return;
         }
         if (!available) { playbackFailed = true; showCaption(); setError('这段声音暂时不可用，可继续看字幕。'); finished(); return; }
-        const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-CN'; u.rate = a.rate; u.pitch = a.pitch;
+        const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-CN'; u.rate = rate; u.pitch = a.pitch;
         const selected = voices.find(v => v.voiceURI === a.voiceURI) ?? voices.find(v => /zh[-_]CN/i.test(v.lang)) ?? voices.find(v => /^zh/i.test(v.lang));
         if (selected) u.voice = selected;
         u.onstart = () => { if (active()) { showCaption(); markAudio(); setLoading(false); setSpeaking(true); setStatus(serviceFailed ? '正在使用设备语音回退' : '正在用设备音色朗读'); } };
@@ -141,11 +157,11 @@ export function useSpeech() {
       signal?.removeEventListener('abort', cancel);
       if (turn === seq.current) { setLoading(false); setSpeaking(false); setStatus(`已播完 · ${serviceFailed ? '设备语音回退' : label || '设备音色'}`); if (request.current === controller) request.current = null; }
     });
-    return { push: queue.push, end: queue.end, done };
+    return { push: (text: string) => { if (active() && text.trim()) { clock.mark('firstSentenceMs'); setTiming(clock.snapshot()); queue.push(text); } }, end: queue.end, done };
   }, [available, voices, stop, unlock, catalog, connection, refresh]);
   const play = useCallback((text: string, a: Artist) => {
     const stream = startStream(a); stream.push(text); stream.end(); return stream.done;
   }, [startStream]);
-  return { voices, speaking, loading, error, status, firstAudioMs, caption, play, startStream, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
+  return { voices, speaking, loading, error, status, firstAudioMs, timing, timingScope, expression: currentExpression, caption, play, startStream, stop, unlock, available, catalog, connection, connectionError, refresh, voiceFor, serviceConfigured: !!serviceBase };
 }
 export type SpeechController = ReturnType<typeof useSpeech>;

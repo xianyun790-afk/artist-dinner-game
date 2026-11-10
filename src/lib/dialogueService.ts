@@ -1,10 +1,12 @@
 import type { Artist } from './types';
 import { speechParts } from './speechQueue.ts';
+import { isArtistExpression, type ArtistExpression } from './artistExpression.ts';
 export interface DialogueLine { who: 'player' | 'artist'; name?: string; text: string }
-export function dialogueBody(artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group') {
+export function dialogueBody(artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group', expression: ArtistExpression = 'calm') {
   if (!text.trim() || text.length > 400) throw new Error('请输入 1–400 字。');
+  if (!isArtistExpression(expression)) throw new Error('人物表达状态不正确。');
   const { id, name, fullName, identityType, personality, bio, medium } = artist;
-  return { persona: { id, name, fullName, identityType, personality, bio, medium }, text: text.trim(), mode,
+  return { persona: { id, name, fullName, identityType, personality, bio, medium }, text: text.trim(), mode, expression,
     history: history.slice(-12).map(m => ({ who: m.who, ...(m.name ? { name: m.name.slice(0, 80) } : {}), text: m.text.slice(0, 2000) })),
   };
 }
@@ -21,7 +23,7 @@ export async function requestDialogue(base: string, body: ReturnType<typeof dial
     const deliver = (text: string, done = false) => {
       if (signal.aborted) throw new DOMException('已打断', 'AbortError');
       if (text.length > 1000 || !text.startsWith(emitted)) throw new Error('NIA 对话流内容不一致。');
-      const { parts } = speechParts(text.slice(emitted.length), done);
+      const { parts } = speechParts(text.slice(emitted.length), done, emitted ? 96 : 48);
       for (const part of parts) { emitted += part; if (part.trim()) onSentence(part.trim()); }
     };
     const packet = (line: string) => {

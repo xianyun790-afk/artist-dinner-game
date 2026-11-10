@@ -22,6 +22,8 @@ import { PaintingScene } from '@/components/PaintingScene';
 import { PaintingMemories } from '@/components/PaintingMemories';
 import { usePaintingJourney } from '@/lib/usePaintingJourney';
 import { recordPaintingMemory } from '@/lib/paintingMemories';
+import { deriveArtistExpression } from '@/lib/artistExpression';
+import type { VoiceInputTiming } from '@/lib/voiceTiming';
 
 type Panel='activity'|'guests'|'addArtist'|'groups'|'works'|'settings'|'memory'|'end'|null;
 export default function App(){
@@ -36,6 +38,7 @@ export default function App(){
   const [activeGroupId,setActiveGroupId]=useState<string|null>(null);
   const [groupRunning,setGroupRunning]=useState(false);const groupRequest=useRef<AbortController|null>(null);const dialogueRequest=useRef<AbortController|null>(null);
   const [pending,setPending]=useState(false);const previousSpeaker=useRef<string|null>(null);
+  const voiceInputTiming=useRef<VoiceInputTiming|undefined>(undefined);
   const dialogue=useDialogue();const dialogueRef=useRef(dialogue);dialogueRef.current=dialogue;
   const speech=useSpeech();const speechRef=useRef(speech);speechRef.current=speech;
   const catalog=useMemo(()=>allArtists(save.customArtists).map(a=>({...a,...save.voiceSettings[a.id]})),[save.customArtists,save.voiceSettings]);
@@ -64,6 +67,7 @@ export default function App(){
   const updateVoice=(values:Partial<ArtistVoiceSettings>)=>setSave(s=>({...s,voiceSettings:{...s.voiceSettings,[voiceTarget.id]:{rate:voiceTarget.rate,pitch:voiceTarget.pitch,voiceURI:voiceTarget.voiceURI,voiceEngine:voiceTarget.voiceEngine,serviceVoice:voiceTarget.serviceVoice,...values}}}));
   const send=(text:string)=>{
     const input=text.trim();if(!input||panel||closingPainting||pending&&!activeGroup)return;
+    const submittedAt=performance.now(),inputTiming=voiceInputTiming.current;voiceInputTiming.current=undefined;
     if(/^(?:打开|看看|看一下|查看)?(?:我的)?(?:回忆|回忆记录|晚宴手记)$/.test(input)){stopConversation();setPanel('memory');return;}
     const encounter=uid();
     if(activeGroup){
@@ -83,10 +87,12 @@ export default function App(){
       void playGroupRound(responses,controller.signal,{
         thinking:r=>setReply({artistId:r.artist.id,text:'',thinking:true}),
         generate:async(r,signal)=>{
-          const voice=speechRef.current.startStream(r.artist,signal,text=>{const last=heard.at(-1);if(last?.name===r.artist.name)last.text+=text;else heard.push({name:r.artist.name,text});journey.capture(encounter,{speakerId:responses[0].artist.id,question:input,explanation:heard.map(h=>`${h.name}：${h.text}`).join('\n\n').slice(0,4000),night:save.night});});voiceCompletion=voice.done.then(ok=>{narrationComplete=narrationComplete&&ok;});let partial='';
+          // A group never inherits a participant's private emotional state.
+          const expression=deriveArtistExpression(undefined,input);
+          const voice=speechRef.current.startStream(r.artist,signal,text=>{const last=heard.at(-1);if(last?.name===r.artist.name)last.text+=text;else heard.push({name:r.artist.name,text});journey.capture(encounter,{speakerId:responses[0].artist.id,question:input,explanation:heard.map(h=>`${h.name}：${h.text}`).join('\n\n').slice(0,4000),night:save.night});},{expression,...(r===responses[0]?{submittedAt,inputTiming}:{timingScope:'group-followup' as const})});voiceCompletion=voice.done.then(ok=>{narrationComplete=narrationComplete&&ok;});let partial='';
           try{return {...r,text:await dialogueRef.current.reply(r.artist,input,roundHistory,'group',r.text,signal,sentence=>{
             partial+=sentence;voice.push(sentence);journey.notice(encounter,partial);setReply({artistId:r.artist.id,text:partial,thinking:false});
-          },()=>{narrationComplete=false;})};}finally{voice.end();}
+          },()=>{narrationComplete=false;},expression)};}finally{voice.end();}
         },
         present:r=>{explained.push(`${r.artist.name}：${r.text}`);roundHistory.push({who:'artist',name:r.artist.name,text:r.text});journey.notice(encounter,r.text);setReply({artistId:r.artist.id,text:r.text,thinking:false});setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'artist',artistId:r.artist.id,text:r.text}));},
         speak:()=>voiceCompletion,pause:groupPause,
@@ -101,17 +107,18 @@ export default function App(){
     void (async()=>{
       const base=save.ended?nextNight(save):save;
       const result=freeTalk(enterConversation(base,a),a,input);const p=result.people[a.id];
+      const expression=deriveArtistExpression(p,input);
       // Short topic replies are authored for this shared table, preserving the
       // emotion/boundary handling in the local conversation engine.
       const contextual=roomReply(a,input);if(contextual&&!/闭嘴|垃圾|蠢|必须|抱歉|对不起|不想|不要|别|不愿/.test(input))p.messages[p.messages.length-1].text=contextual;
       const authored=p.messages.filter(m=>m.who==='artist').at(-1)?.text??a.quiet;
       let heard='';
       journey.capture(encounter,{speakerId:a.id,question:input,explanation:'',night:result.night});
-      const voice=speechRef.current.startStream(a,controller.signal,text=>{heard+=text;journey.capture(encounter,{speakerId:a.id,question:input,explanation:heard.slice(0,4000),night:result.night});});let partial='';
+      const voice=speechRef.current.startStream(a,controller.signal,text=>{heard+=text;journey.capture(encounter,{speakerId:a.id,question:input,explanation:heard.slice(0,4000),night:result.night});},{expression,submittedAt,inputTiming});let partial='';
       let line=authored,completeReply=true;
       try {line=await dialogueRef.current.reply(a,input,(save.people[a.id]?.messages??[]).map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':a.name})),'private',authored,controller.signal,sentence=>{
         partial+=sentence;voice.push(sentence);journey.notice(encounter,partial);setReply({artistId:a.id,text:partial,thinking:false});
-      },()=>{completeReply=false;});}
+      },()=>{completeReply=false;},expression);}
       catch {return;}
       finally{voice.end();}
       if(controller.signal.aborted||dialogueRequest.current!==controller)return;
@@ -126,12 +133,12 @@ export default function App(){
   };
   const confirmSuggestion=()=>{const key=suggestion;setSuggestion(null);if(key==='art')beginArt();else if(key==='works')setPanel('works');else if(key==='invite')setPanel('guests');else if(key==='settings')setPanel('settings');else if(key==='memory')setPanel('memory');else if(key==='end')setPanel('end');};
   return <div className="app-shell fullscreen-dinner">
-    <main className={`main-content ${painting?'behind-painting':''}`} aria-hidden={!!painting||undefined} inert={painting?true:undefined}><section className="stage-shell room-stage" aria-label="艺术家晚宴场景" data-first-audio-ms={speech.firstAudioMs??undefined} data-voice-status={speech.status}><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply}/></div></div>
+    <main className={`main-content ${painting?'behind-painting':''}`} aria-hidden={!!painting||undefined} inert={painting?true:undefined}><section className="stage-shell room-stage" aria-label="艺术家晚宴场景" data-first-audio-ms={speech.firstAudioMs??undefined} data-voice-timing={JSON.stringify(speech.timing)} data-voice-timing-scope={speech.timingScope} data-voice-expression={speech.expression} data-voice-status={speech.status}><div className="stage-scroll"><div className="stage-inner"><SalonScene guests={guests} people={save.people} activeId={reply?.artistId??null} preferredId={preferred} onSelect={select} speaking={speech.speaking} reply={reply}/></div></div>
       <button className="room-add-artist" aria-label="添加艺术家" title="添加艺术家" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('addArtist');}}><UserRoundPlus size={21} strokeWidth={1.5}/></button>
       <button className="room-add-artist room-group-button" aria-label="发起群聊" title="发起群聊" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('groups');}}><UsersRound size={21} strokeWidth={1.5}/></button>
       <button className="room-add-artist room-memory-button" aria-label="回忆记录" title="回忆记录" aria-haspopup="dialog" onClick={()=>{stopConversation();setSuggestion(null);setPanel('memory');}}><BookOpen size={20} strokeWidth={1.5}/></button>
       {activeGroup&&<div className="room-group-status"><button onClick={()=>{stopConversation();setPanel('groups');}} aria-label="查看当前群聊"><UsersRound size={13}/><span>{activeGroup.name}</span></button><button aria-label="离开群聊" title="离开群聊" onClick={()=>{stopConversation();setActiveGroupId(null);setPreferred(null);setReply(null);}}><X size={14}/></button></div>}
-      <RoomInput onSend={send} busy={pending||!!panel||closingPainting} speaking={speech.speaking} loading={speech.loading} onUnlock={speech.unlock} onStop={stopConversation} responding={groupRunning||pending} speechError={speech.error||dialogue.error}/>
+      <RoomInput onSend={send} onInputTiming={timing=>{voiceInputTiming.current=timing;}} busy={pending||!!panel||closingPainting} speaking={speech.speaking} loading={speech.loading} onUnlock={speech.unlock} onStop={stopConversation} responding={groupRunning||pending} speechError={speech.error||dialogue.error}/>
       {suggestion&&<aside className="keyword-popup room-suggestion" aria-label="对话中的小提议" role="status"><button className="keyword-dismiss icon-btn" aria-label="关闭小提议" onClick={()=>setSuggestion(null)}><X size={14}/></button><p>{keywordInfo[suggestion].title}</p><button className="keyword-action" onClick={confirmSuggestion}>{keywordInfo[suggestion].action}<ArrowRight size={14}/></button></aside>}
     </section></main>
     {painting&&<PaintingScene key={painting.id} painting={painting} phase={journey.state.phase} onLeave={exitPainting} onLoad={()=>journey.loaded(painting.id)} onError={()=>journey.failed(painting.id)} subtitle={journey.state.phase==='replay'?null:speech.caption?.text??null}/>}

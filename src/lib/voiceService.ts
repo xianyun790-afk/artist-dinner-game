@@ -70,10 +70,14 @@ export function artistVoicePreset(artistId: string, catalog: VoiceCatalog) {
   for (const id of ['volcengine', 'minimax'] as const) {
     const provider = catalog.providers.find(p => p.id === id);
     if (!provider) continue;
-    const preferredModel = id === 'volcengine' ? 'seed-tts-2.0-standard' : 'speech-2.8-turbo';
-    const model = provider.models.some(m => m.id === preferredModel) ? preferredModel : provider.defaultModel;
-    const voice = (id === 'volcengine' ? doubaoVoices[artistId] : preset.voices).find(v => validateServiceVoice({ provider: id, model, voice: v }, catalog));
-    if (voice) return { title: preset.title, description: preset.description, rate: preset.rate, pitch: preset.pitch, choice: { provider: id, model, voice } };
+    // Prefer the compatible expressive model for new defaults so character
+    // direction actually reaches TTS. A saved serviceVoice is resolved before
+    // this function and remains the player's explicit choice.
+    const preferredModels = id === 'volcengine' ? ['seed-tts-2.0-expressive', 'seed-tts-2.0-standard'] : ['speech-2.8-turbo'];
+    for (const model of [...new Set([...preferredModels, provider.defaultModel])]) {
+      const voice = (id === 'volcengine' ? doubaoVoices[artistId] : preset.voices).find(v => validateServiceVoice({ provider: id, model, voice: v }, catalog));
+      if (voice) return { title: preset.title, description: preset.description, rate: preset.rate, pitch: preset.pitch, choice: { provider: id, model, voice } };
+    }
   }
 }
 export function artistSpeechStyle(artistId: string) {
@@ -169,4 +173,41 @@ export async function synthesizeVoice(base: string, choice: ServiceVoice, line: 
   const binary = atob(encoded), bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
+}
+
+// Cache only completed audio in this caller's memory. A cancelled request never
+// populates the cache, and each caller receives an owned buffer (decodeAudioData
+// may detach it). No localStorage, server history or source uploads are used.
+export function createVoiceSynthesizer(options: { maxEntries?: number; maxBytes?: number; ttlMs?: number; now?: () => number } = {}) {
+  const maxEntries = Math.max(0, Math.min(24, Math.floor(options.maxEntries ?? 16)));
+  const maxBytes = Math.max(0, Math.min(8_000_000, options.maxBytes ?? 4_000_000));
+  const ttlMs = Math.max(0, Math.min(120_000, options.ttlMs ?? 60_000));
+  const now = options.now ?? Date.now;
+  const cache = new Map<string, { audio: ArrayBuffer; expires: number }>();
+  let bytes = 0;
+  const remove = (key: string) => { const value = cache.get(key); if (value) { bytes -= value.audio.byteLength; cache.delete(key); } };
+  const prune = () => { for (const [key, value] of cache) if (value.expires <= now()) remove(key); };
+  return {
+    async synthesize(base: string, choice: ServiceVoice, line: string, rate: number, pitch: number, signal: AbortSignal, fetcher: typeof fetch = fetch, style = ''): Promise<ArrayBuffer> {
+      const checkAbort = () => { if (signal.aborted) throw new DOMException('已停止', 'AbortError'); };
+      checkAbort(); prune();
+      const key = JSON.stringify([serviceUrl(base), synthesisBody(choice, line, rate, pitch, style)]);
+      const saved = cache.get(key);
+      if (saved) {
+        cache.delete(key); cache.set(key, saved);
+        return saved.audio.slice(0);
+      }
+      // In-flight requests are deliberately not shared: cancelling one turn
+      // must not cancel another caller or allow late audio to be played.
+      const audio = await synthesizeVoice(base, choice, line, rate, pitch, signal, fetcher, style);
+      checkAbort();
+      if (maxEntries && ttlMs && audio.byteLength <= maxBytes) {
+        remove(key);
+        cache.set(key, { audio: audio.slice(0), expires: now() + ttlMs }); bytes += audio.byteLength;
+        while (cache.size > maxEntries || bytes > maxBytes) remove(cache.keys().next().value!);
+      }
+      return audio;
+    },
+    clear() { cache.clear(); bytes = 0; },
+  };
 }

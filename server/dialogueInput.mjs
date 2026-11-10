@@ -1,0 +1,19 @@
+import expressionDirections from '../src/lib/expressionDirections.json' with { type: 'json' };
+
+export function dialogueInput(input) {
+  if (!input || typeof input !== 'object' || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 400 || !['private', 'group'].includes(input.mode)) throw new Error('invalid');
+  const raw = input.persona;
+  if (!raw || typeof raw !== 'object' || typeof raw.name !== 'string' || !raw.name.trim()) throw new Error('invalid');
+  const persona = {};
+  for (const key of ['id', 'name', 'fullName', 'identityType', 'personality', 'bio', 'medium']) {
+    if (typeof raw[key] === 'string') persona[key] = raw[key].slice(0, 1000);
+  }
+  if (!Array.isArray(input.history) || input.history.length > 12) throw new Error('invalid');
+  const history = input.history.map(m => {
+    if (!m || !['player', 'artist'].includes(m.who) || typeof m.text !== 'string' || m.text.length > 2000) throw new Error('invalid');
+    return { who: m.who, ...(typeof m.name === 'string' ? { name: m.name.slice(0, 80) } : {}), text: m.text };
+  });
+  const expression = input.expression === undefined ? 'calm' : input.expression;
+  if (typeof expression !== 'string' || !Object.hasOwn(expressionDirections, expression)) throw new Error('invalid');
+  return { persona, history, text: input.text.trim(), mode: input.mode, expression };
+}
