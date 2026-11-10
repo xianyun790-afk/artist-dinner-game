@@ -1,0 +1,29 @@
+Browser tab: 29, Title: "余光 AFTERGLOW — 艺术家晚宴", URL: "http://127.0.0.1:4893/?slot=qa-followup-1110&v=qa-followup-1110".
+1 AXWebArea 余光 AFTERGLOW — 艺术家晚宴, URL: 127.0.0.1:4893/?slot=qa-followup-1110&v=qa-followup-1110
+	2 container 艺术家晚宴场景
+		3 container
+			4 checkbox Description: 让莫奈接话, Value: 0
+			5 checkbox Description: 让梵高接话, Value: 0
+			6 text 光影 色彩
+			25 container 莫奈的回复
+				26 text 刚才你让我看《星月夜》，那画面已经铺开在大家面前了，要不先别急着换话题？ 至于今天想做的事，我大概会去吉维尼的花园，再看看那池睡莲在光里的变化。你呢？
+		7 pop up button 添加艺术家
+			8 image
+		9 pop up button 发起群聊
+			10 image
+		11 pop up button 回忆记录
+			12 image
+		13 container
+			14 button 查看当前群聊
+				15 image
+				16 text 验收小桌
+			17 button 离开群聊
+				18 image
+		19 container
+			20 text field (settable) 想聊点什么
+			21 button (disabled) 发送
+				22 image
+			23 button 收起打字
+				24 image
+
+The focused UI element is 1 AXWebArea 余光 AFTERGLOW — 艺术家晚宴, URL: 127.0.0.1:4893/?slot=qa-followup-1110&v=qa-followup-1110

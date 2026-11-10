@@ -36,11 +36,12 @@ export function createPaintingJourney(options: {
   let state = initialPaintingJourney();
   let revision = 0;
   let progress: PaintingExplanation | null = null;
+  let paused = false;
   let disposed = false;
   const loaded = new Set<string>(), failed = new Set<string>();
   const timers = options.timers ?? defaultTimers, scheduled = new Set<unknown>();
   const publish = () => options.onState?.(state);
-  const clear = () => { revision++; for (const timer of scheduled) timers.clear(timer); scheduled.clear(); progress = null; };
+  const clear = () => { revision++; for (const timer of scheduled) timers.clear(timer); scheduled.clear(); progress = null; paused = false; };
   const current = (version: number) => !disposed && revision === version;
   const later = (callback: () => void, delay: number, version: number) => {
     const timer = timers.set(() => { scheduled.delete(timer); if (current(version)) callback(); }, delay);
@@ -51,19 +52,20 @@ export function createPaintingJourney(options: {
   };
   const capture = (token: string, explanation: PaintingExplanation) => {
     // The first reply can introduce the painting after its metadata was captured.
-    if (disposed || !token || token !== state.token || state.phase !== 'viewing') return;
+    if (disposed || paused || !token || token !== state.token || state.phase !== 'viewing') return;
     if (!explanation.speakerId.trim() || !explanation.question.trim() || typeof explanation.explanation !== 'string' || !Number.isSafeInteger(explanation.night) || explanation.night < 1) return;
     progress = { ...explanation };
   };
   return {
     get state() { return state; },
     begin(token: string, text: string) {
-      if (disposed) return;
+      if (disposed) return state;
       clear(); const next = paintingFromPlayer(state, text);
       state = { painting: next.painting, suppressed: next.suppressed, phase: 'viewing', token, finishing: false }; publish();
+      return state;
     },
     notice(token: string, text: string) {
-      if (disposed || !token || token !== state.token || state.phase !== 'viewing') return;
+      if (disposed || paused || !token || token !== state.token || state.phase !== 'viewing') return;
       const next = paintingFromReply(state, text);
       if (next.painting === state.painting && next.suppressed === state.suppressed) return;
       state = { ...state, painting: next.painting, suppressed: next.suppressed }; publish();
@@ -72,6 +74,11 @@ export function createPaintingJourney(options: {
     finish(token: string, explanation: PaintingExplanation, completed: boolean) {
       // Completion does not frame, archive, or block another spoken follow-up.
       if (completed) capture(token, explanation);
+    },
+    pause() {
+      // Leaving the tab stops narration, but keeps the heard snapshot for exit.
+      // No callback from the stopped turn can extend or reopen that snapshot.
+      if (!disposed && !state.finishing) paused = true;
     },
     exit() {
       if (disposed || !state.painting || state.finishing || !['viewing', 'replay'].includes(state.phase)) return;

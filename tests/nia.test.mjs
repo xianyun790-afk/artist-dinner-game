@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { signNiaToken, buildPersonaPrompt, generateNiaReply } from '../server/nia.mjs';
 import { artistPersonas, personaRules } from '../server/personas.mjs';
+import { dialogueInput } from '../server/dialogueInput.mjs';
 const config = { accessKey: 'test-access', secretKey: 'test-only-secret', model: 'test-model' };
 function socketMock(scenario = 'ok') {
   class Mock extends EventTarget {
@@ -57,6 +58,20 @@ test('group prompt and wire context include only supplied group messages, with n
   assert.equal(socket.sent[1].custom_config.fn_call, undefined);
   assert.deepEqual(JSON.parse(socket.sent[3].text), { recentConversation: history, playerMessage: '你好' });
   assert.match(buildPersonaPrompt(options.persona), /没有任何操作工具/);
+});
+
+test('validated current scene reaches NIA and overrides old artwork history without declaring loaded images', async () => {
+  const history = [{ who: 'player', text: '大家安静，给我看看星月夜' }];
+  for (const context of [{ scene: 'table' }, { scene: 'painting', paintingId: 'starry-night' }]) {
+    const payload = dialogueInput({ ...options, history, text: '大家，随便聊聊你们今天想做的事，每人一句。', mode: 'group', context });
+    const Socket = socketMock();
+    await generateNiaReply({ ...payload, config }, Socket);
+    const prompt = Socket.instances[0].sent[1].custom_config.system_prompt;
+    assert.match(prompt, /玩家可以随时换话题/);
+    assert.match(prompt, context.scene === 'table' ? /当前场景是餐桌/ : /本轮界面已请求展示《星月夜》/);
+    if (context.scene === 'painting') assert.match(prompt, /不表示图片已经加载/);
+    assert.deepEqual(JSON.parse(Socket.instances[0].sent[3].text), { recentConversation: history, playerMessage: payload.text });
+  }
 });
 test('each built-in prompt receives only its own authored persona, while a namesake custom artist keeps an independent identity', () => {
   for (const [id, card] of Object.entries(artistPersonas)) {

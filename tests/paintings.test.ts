@@ -33,6 +33,36 @@ test('Monet Water Lilies has its own real artwork and respects declined display'
   assert.equal(findMentionedPainting('Bridge over a Pond of Water Lilies'), null);
 });
 
+test('assistant mentions of ordinary water lilies keep the dinner conversation on screen', () => {
+  const table: PaintingSceneState = { painting: null, suppressed: false };
+  for (const text of [
+    '我想去水边坐坐，看睡莲在风里轻晃的影子。你呢？',
+    '池塘里睡莲开了。', '我想去花园看看睡莲。', '水上的睡 莲很美。',
+    'The water lilies are blooming in my garden.',
+    '我昨天画了一幅画，今天去花园看看睡莲。',
+  ]) assert.equal(paintingFromReply(table, text), table, text);
+  for (const text of ['睡莲', '莫奈的睡莲', '聊聊Water Lilies']) {
+    assert.equal(paintingFromPlayer(table, text).painting, waterLilies, text);
+  }
+});
+
+test('assistant explicit Water Lilies artwork names still open the painting', () => {
+  const table: PaintingSceneState = { painting: null, suppressed: false };
+  for (const text of [
+    '我们说到《睡莲》。', '睡莲这幅画里有细微的光。', '我想谈谈画作睡莲。',
+    '在睡莲系列中，光一直在变化。', '这幅画《睡 莲》描绘了水面。',
+    'My painting Water Lilies explores reflections.', 'The Water Lilies series studies light.',
+    'Let us look at “Nymphéas”.',
+  ]) assert.equal(paintingFromReply(table, text).painting, waterLilies, text);
+  for (const work of [starryNight, persistenceOfMemory, blueGreenMusic]) {
+    assert.equal(paintingFromReply(table, `我想到${work.title}。`).painting, work);
+  }
+  assert.equal(paintingFromReply(table, '先别展示《睡莲》'), table);
+  const left: PaintingSceneState = { painting: null, suppressed: true };
+  assert.equal(paintingFromReply(left, '再看看睡莲这幅画'), left);
+  assert.equal(paintingFromReply(table, '先聊星月夜，再去花园看看睡莲。').painting, starryNight);
+});
+
 test('Dalí and O’Keeffe titles select their own works across Chinese and English aliases', () => {
   for (const text of ['达利《记忆的永恒》', '永恒的记忆', '达利的软钟', '达利软钟', 'The Persistence of Memory', 'PERSISTENCE   OF MEMORY']) {
     assert.equal(findMentionedPainting(text), persistenceOfMemory, text);

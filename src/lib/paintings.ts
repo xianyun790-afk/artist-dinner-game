@@ -91,8 +91,24 @@ export function paintingFromPlayer(state: PaintingSceneState, text: string): Pai
   // can invite the player back after they have chosen to leave it.
   return painting ? { painting, suppressed: false } : state;
 }
+function hasArtworkContext(text: string, mention: RegExpMatchArray): boolean {
+  const before = text.slice(0, mention.index).slice(-40);
+  const after = text.slice(mention.index! + mention[0].length, mention.index! + mention[0].length + 40);
+  const titleQuotes = [['《', '》'], ['“', '”'], ['「', '」'], ['『', '』'], ['"', '"'], ["'", "'"]];
+  if (titleQuotes.some(([open, close]) => before.trimEnd().endsWith(open) && after.trimStart().startsWith(close))) return true;
+  return /(?:画作|作品|名画|油画|(?:这|那)(?:幅|张)画)\s*[《“"'「『]?\s*$/u.test(before)
+    || /^[》”"'」』\s]*(?:(?:这|那)(?:一)?(?:幅|张)画|(?:的)?(?:画作|作品|原作|油画|系列))/u.test(after)
+    || /\b(?:painting|artwork|canvas|series)(?:\s+(?:called|titled|named))?\s*["“']?\s*$/iu.test(before)
+    || /^\s*["”']?\s+(?:painting|artwork|series)\b/iu.test(after);
+}
 export function paintingFromReply(state: PaintingSceneState, text: string): PaintingSceneState {
   if (state.suppressed || state.painting) return state;
-  const painting = findMentionedPainting(text);
+  if (declinesPaintingDisplay(text)) return state;
+  const relevant = relevantText(text);
+  // An artist may mention real flowers in ordinary conversation. Only the
+  // player's bare title, or an assistant's explicit artwork reference, opens it.
+  const painting = titleMentions(relevant)
+    .filter(({ painting, match }) => painting.id !== waterLilies.id || hasArtworkContext(relevant, match))
+    .at(-1)?.painting;
   return painting ? { painting, suppressed: false } : state;
 }

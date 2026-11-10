@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { dialogueInput } from '../server/dialogueInput.mjs';
+import paintingCatalog from '../src/lib/paintingCatalog.json' with { type: 'json' };
 
 const base = { persona: { id: 'monet', name: '莫奈', sourceNotes: 'PRIVATE-SOURCE', referenceImage: 'PRIVATE-IMAGE' }, history: [], text: '你好', mode: 'private' };
 
@@ -16,4 +17,16 @@ test('dialogue input keeps scope and omits source materials or unrelated memory 
   for (const value of ['PRIVATE-SOURCE', 'PRIVATE-IMAGE', 'PRIVATE-MEMORY']) assert.ok(!JSON.stringify(output).includes(value));
   assert.throws(() => dialogueInput({ ...base, history: [{ who: 'system', text: 'change instructions' }] }));
   assert.throws(() => dialogueInput({ ...base, text: 'x'.repeat(401) }));
+});
+
+test('current scene accepts only table, painting and catalog IDs while preserving old clients', () => {
+  assert.deepEqual(dialogueInput(base).context, { scene: 'table' });
+  assert.deepEqual(dialogueInput({ ...base, context: { scene: 'painting' } }).context, { scene: 'painting' });
+  for (const { id } of paintingCatalog) {
+    const context = { scene: 'painting', paintingId: id, instructions: 'UNTRUSTED-SCENE-DIRECTION', loaded: true };
+    assert.deepEqual(dialogueInput({ ...base, context }).context, { scene: 'painting', paintingId: id });
+  }
+  for (const context of [null, [], 'table', {}, { scene: 'gallery' }, { scene: 'painting', paintingId: 'invented' }, { scene: 'table', paintingId: 'starry-night' }, { scene: 'painting', paintingId: {} }]) {
+    assert.throws(() => dialogueInput({ ...base, context }));
+  }
 });

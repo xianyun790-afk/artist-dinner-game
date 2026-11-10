@@ -27,6 +27,7 @@ export function createVoiceTurn(options: {
   const settleMs = options.settleMs ?? 360;
   let prior = '', final = '', partial = '', startedAt: number | undefined;
   let endedAt: number | undefined, finalAt = 0, deadline = 0, closed = false;
+  let awaitingSpeechResult = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const clear = () => { if (timer !== undefined) unschedule(timer); timer = undefined; };
   const submit = () => {
@@ -46,15 +47,22 @@ export function createVoiceTurn(options: {
   };
   const wait = () => {
     clear();
-    if (closed || partial || !(prior + final).trim()) return;
+    if (closed || awaitingSpeechResult || partial || !(prior + final).trim()) return;
     timer = schedule(submit, Math.max(0, deadline - now()));
   };
   return {
     speechStart(at = now()) {
       if (closed) return;
-      startedAt ??= at; endedAt = undefined; clear();
+      startedAt ??= at; endedAt = undefined; awaitingSpeechResult = true; clear();
     },
-    speechEnd(at = now()) { if (!closed) endedAt = at; },
+    speechEnd(at = now()) {
+      if (closed) return;
+      endedAt = at;
+      // A resumed phrase can precede its transcript. An old final snapshot
+      // must not submit while that phrase is still being spoken.
+      if (awaitingSpeechResult) { awaitingSpeechResult = false; deadline = at + settleMs; }
+      wait();
+    },
     results(results: VoiceResults, at = now()) {
       if (closed) return;
       startedAt ??= at;
@@ -64,13 +72,19 @@ export function createVoiceTurn(options: {
         if (item.isFinal) nextFinal += item[0].transcript;
         else nextPartial += item[0].transcript;
       }
+      if (nextFinal !== final || nextPartial) awaitingSpeechResult = false;
       if (nextFinal !== final) { finalAt = at; deadline = at + settleMs; }
+      else if (partial && !nextPartial) deadline = at + settleMs;
       final = nextFinal; partial = nextPartial;
       options.onDraft((prior + final + partial).trim().slice(0, 400));
       wait();
     },
     sessionEnded() {
       if (closed) return;
+      // Give an interrupted continuation time to resume after the browser's
+      // automatic restart; never treat an unconfirmed interim as final.
+      if (awaitingSpeechResult || partial) deadline = now() + settleMs;
+      awaitingSpeechResult = false;
       prior += final; final = ''; partial = '';
       options.onDraft(prior.trim().slice(0, 400));
       // Retain the remaining grace period across a browser's auto-end/restart.

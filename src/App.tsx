@@ -5,7 +5,7 @@ import { choose, clearMemories, enterConversation, freeTalk, makeMark, nextNight
 import { exportSave, loadSave, writeSave } from '@/lib/storage';
 import { useSpeech } from '@/lib/useSpeech';
 import { useDialogue } from '@/lib/useDialogue';
-import type { DialogueLine } from '@/lib/dialogueService';
+import type { DialogueLine, DialogueContext } from '@/lib/dialogueService';
 import type { Artist, ArtistVoiceSettings, Save } from '@/lib/types';
 import { Modal } from '@/components/ui/Modal';
 import { SalonScene } from '@/components/SalonScene';
@@ -47,13 +47,14 @@ export default function App(){
   const active=catalog.find(a=>a.id===save.activeId);const person=active?save.people[active.id]:undefined;
   const last=person?.messages.filter(m=>m.who==='artist').at(-1);
   const cancelJourney=journey.cancel;
+  const pauseJourney=journey.pause;
   const stopPlayback=useCallback(()=>{groupRequest.current?.abort();groupRequest.current=null;dialogueRequest.current?.abort();dialogueRequest.current=null;setGroupRunning(false);setPending(false);setReply(r=>r?.thinking?null:r);speechRef.current.stop();},[]);
   const stopConversation=useCallback(()=>{cancelJourney();stopPlayback();},[cancelJourney,stopPlayback]);
   const exitJourney=journey.exit;
   const exitPainting=useCallback(()=>{exitJourney();stopPlayback();},[exitJourney,stopPlayback]);
   useEffect(()=>()=>{groupRequest.current?.abort();dialogueRequest.current?.abort();},[]);
   useEffect(()=>{if(panel)stopConversation();},[panel,stopConversation]);
-  useEffect(()=>{const quiet=()=>{if(document.hidden){if(closingPainting)stopPlayback();else stopConversation();}};document.addEventListener('visibilitychange',quiet);return()=>document.removeEventListener('visibilitychange',quiet);},[stopConversation,stopPlayback,closingPainting]);
+  useEffect(()=>{const quiet=()=>{if(document.hidden){pauseJourney();stopPlayback();}};document.addEventListener('visibilitychange',quiet);return()=>document.removeEventListener('visibilitychange',quiet);},[pauseJourney,stopPlayback]);
   const closePanel=useCallback(()=>{setPanel(null);setConfirmForget(null);speechRef.current.stop();},[]);
   useEffect(()=>{const ok=writeSave(save);setSaved(ok);},[save]);
   useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4500);return()=>clearTimeout(t);},[toast]);
@@ -72,10 +73,13 @@ export default function App(){
     const encounter=uid();
     if(activeGroup){
       stopConversation();speech.unlock();setSuggestion(null);
-      journey.begin(encounter,input);
+      const scene=journey.begin(encounter,input);
+      const context:DialogueContext=scene.painting?{scene:'painting',paintingId:scene.painting.id}:{scene:'table'};
       const members=groupMembers(activeGroup.memberIds,catalog);
       const responses=groupReplies(input,members,activeGroup.messages,preferred);
       setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'player',text:input}));
+      const paintingSpeaker=responses[0]?.artist.id??members[0]?.id;
+      if(paintingSpeaker)journey.capture(encounter,{speakerId:paintingSpeaker,question:input,explanation:'',night:save.night});
       if(!responses.length){setReply(null);setToast('好，先安静一会儿。');return;}
       const controller=new AbortController();groupRequest.current=controller;setGroupRunning(true);
       const roundHistory:DialogueLine[]=activeGroup.messages.map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':catalog.find(a=>a.id===m.artistId)?.name}));
@@ -83,7 +87,6 @@ export default function App(){
       let voiceCompletion=Promise.resolve(),narrationComplete=true;
       const explained:string[]=[];
       const heard:{name:string;text:string}[]=[];
-      journey.capture(encounter,{speakerId:responses[0].artist.id,question:input,explanation:'',night:save.night});
       void playGroupRound(responses,controller.signal,{
         thinking:r=>setReply({artistId:r.artist.id,text:'',thinking:true}),
         generate:async(r,signal)=>{
@@ -92,7 +95,7 @@ export default function App(){
           const voice=speechRef.current.startStream(r.artist,signal,text=>{const last=heard.at(-1);if(last?.name===r.artist.name)last.text+=text;else heard.push({name:r.artist.name,text});journey.capture(encounter,{speakerId:responses[0].artist.id,question:input,explanation:heard.map(h=>`${h.name}：${h.text}`).join('\n\n').slice(0,4000),night:save.night});},{expression,...(r===responses[0]?{submittedAt,inputTiming}:{timingScope:'group-followup' as const})});voiceCompletion=voice.done.then(ok=>{narrationComplete=narrationComplete&&ok;});let partial='';
           try{return {...r,text:await dialogueRef.current.reply(r.artist,input,roundHistory,'group',r.text,signal,sentence=>{
             partial+=sentence;voice.push(sentence);journey.notice(encounter,partial);setReply({artistId:r.artist.id,text:partial,thinking:false});
-          },()=>{narrationComplete=false;},expression)};}finally{voice.end();}
+          },()=>{narrationComplete=false;},expression,context)};}finally{voice.end();}
         },
         present:r=>{explained.push(`${r.artist.name}：${r.text}`);roundHistory.push({who:'artist',name:r.artist.name,text:r.text});journey.notice(encounter,r.text);setReply({artistId:r.artist.id,text:r.text,thinking:false});setSave(s=>appendGroupMessage(s,activeGroup.id,{id:uid(),who:'artist',artistId:r.artist.id,text:r.text}));},
         speak:()=>voiceCompletion,pause:groupPause,
@@ -102,7 +105,8 @@ export default function App(){
     if(pending)return;
     const a=responderFor(input,guests,preferred,previousSpeaker.current);if(!a)return;
     speech.unlock();speech.stop();setSuggestion(null);setPending(true);setReply({artistId:a.id,text:'',thinking:true});previousSpeaker.current=a.id;
-    journey.begin(encounter,input);
+    const scene=journey.begin(encounter,input);
+    const context:DialogueContext=scene.painting?{scene:'painting',paintingId:scene.painting.id}:{scene:'table'};
     const controller=new AbortController();dialogueRequest.current=controller;
     void (async()=>{
       const base=save.ended?nextNight(save):save;
@@ -118,7 +122,7 @@ export default function App(){
       let line=authored,completeReply=true;
       try {line=await dialogueRef.current.reply(a,input,(save.people[a.id]?.messages??[]).map(m=>({who:m.who,text:m.text,name:m.who==='player'?'玩家':a.name})),'private',authored,controller.signal,sentence=>{
         partial+=sentence;voice.push(sentence);journey.notice(encounter,partial);setReply({artistId:a.id,text:partial,thinking:false});
-      },()=>{completeReply=false;},expression);}
+      },()=>{completeReply=false;},expression,context);}
       catch {return;}
       finally{voice.end();}
       if(controller.signal.aborted||dialogueRequest.current!==controller)return;

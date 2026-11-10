@@ -15,7 +15,9 @@ export function createSpeechQueue<T>(options: {
     else signal.addEventListener('abort', () => { resolve(null); wake?.(); }, { once: true });
   });
   async function prepare(text: string) {
-    if (active >= 2) await Promise.race([new Promise<void>(resolve => slots.push(resolve)), cancelled]);
+    // A newly pushed job can claim a released slot before a queued job resumes
+    // from its promise. Recheck after every wake-up so both cannot claim it.
+    while (active >= 2 && !signal.aborted) await Promise.race([new Promise<void>(resolve => slots.push(resolve)), cancelled]);
     if (signal.aborted) throw new DOMException('已停止', 'AbortError');
     active++;
     try { return await options.prepare(text, signal); }

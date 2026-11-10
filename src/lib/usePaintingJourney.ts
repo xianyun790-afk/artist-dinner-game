@@ -16,6 +16,7 @@ export function usePaintingJourney(onArchive: (memory: PaintingMemory) => void) 
     notice: journey.notice,
     capture: journey.capture,
     finish: journey.finish,
+    pause: journey.pause,
     exit: journey.exit,
     cancel: journey.cancel,
     leave: journey.leave,

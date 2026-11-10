@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createPaintingJourney, PAINTING_JOURNEY_TIMING } from '../src/lib/paintingJourney.ts';
 import { starryNight, waterLilies } from '../src/lib/paintings.ts';
 import type { PaintingMemory } from '../src/lib/types';
+import { artists } from '../src/lib/artists.ts';
+import { groupReplies, playGroupRound } from '../src/lib/groupChat.ts';
 
 function setup() {
   let time = 0, id = 0;
@@ -55,6 +57,22 @@ test('exiting before the first spoken sentence can keep a painting with an empty
   journey.exit(); tick(frame); assert.equal(archived.length, 1); assert.equal(archived[0].explanation, '');
 });
 
+test('a quiet group can collect a painting without generating a narration', async () => {
+  const { journey, archived, tick } = setup();
+  const input = '大家安静，给我看看星月夜', members = artists.slice(0, 2);
+  const replies = groupReplies(input, members, [], null);
+  assert.equal(replies.length, 0);
+  journey.begin('quiet-group', input);
+  journey.capture('quiet-group', { speakerId: members[0].id, question: input, explanation: '', night: 1 });
+  const unexpected = () => { assert.fail('a quiet group must not generate or play a reply'); };
+  await playGroupRound(replies, new AbortController().signal, {
+    thinking: unexpected, present: unexpected, speak: async () => unexpected(), pause: async () => unexpected(),
+  });
+  journey.loaded(starryNight.id); journey.exit(); tick(frame);
+  assert.equal(archived.length, 1); assert.equal(archived[0].paintingId, starryNight.id);
+  assert.equal(archived[0].question, input); assert.equal(archived[0].explanation, '');
+});
+
 test('metadata captured before an assistant title is still available when the painting opens', () => {
   const { journey, archived, tick } = setup();
   journey.begin('introduced', '聊聊夜色'); journey.capture('introduced', explanation);
@@ -85,6 +103,45 @@ test('incomplete final replies preserve the last captured progress without auto 
   journey.finish('incomplete', explanation, false); tick(10_000);
   assert.equal(journey.state.phase, 'viewing'); assert.equal(archived.length, 0);
   journey.exit(); tick(frame); assert.equal(archived[0].explanation, '实际听过的话。');
+});
+
+test('hiding the page preserves complete or partial narration for exit and freezes late callbacks', () => {
+  for (const completed of [false, true]) {
+    const { journey, archived, tick } = setup();
+    journey.begin('hidden', '星月夜'); journey.loaded(starryNight.id);
+    const heard = { ...explanation, explanation: completed ? '已经听完的讲解。' : '已经听到的前一句。' };
+    journey.capture('hidden', heard);
+    journey.finish('hidden', heard, completed);
+    journey.pause();
+    journey.capture('hidden', { ...explanation, explanation: '迟到的后半句。' });
+    journey.finish('hidden', explanation, true); journey.notice('hidden', '睡莲');
+    tick(10_000);
+    assert.equal(journey.state.painting, starryNight);
+    assert.equal(archived.length, 0);
+    journey.exit(); tick(frame);
+    assert.equal(archived.length, 1);
+    assert.equal(archived[0].explanation, heard.explanation);
+    tick(file); assert.equal(journey.state.painting, null);
+  }
+});
+
+test('a paused turn cannot open a late painting and a new turn accepts its own progress', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('old-hidden', '聊聊夜色'); journey.capture('old-hidden', explanation); journey.pause();
+  journey.notice('old-hidden', '星月夜'); assert.equal(journey.state.painting, null);
+  journey.begin('new-visible', '看看睡莲'); journey.loaded(waterLilies.id);
+  journey.capture('new-visible', { ...explanation, speakerId: 'monet', explanation: '新一轮讲解。' });
+  journey.capture('old-hidden', explanation); journey.finish('old-hidden', explanation, true);
+  journey.exit(); tick(frame);
+  assert.equal(archived.length, 1); assert.equal(archived[0].id, 'new-visible');
+  assert.equal(archived[0].paintingId, waterLilies.id); assert.equal(archived[0].explanation, '新一轮讲解。');
+});
+
+test('hiding during framing leaves the pending archive intact', () => {
+  const { journey, archived, tick } = setup();
+  journey.begin('closing-hidden', '星月夜'); journey.loaded(starryNight.id); journey.capture('closing-hidden', explanation);
+  journey.exit(); journey.pause(); tick(frame + file);
+  assert.equal(archived.length, 1); assert.equal(journey.state.painting, null);
 });
 
 test('cancel and leave invalidate progress; cancellation during closing removes pending archive', () => {
@@ -136,4 +193,16 @@ test('ordinary follow-ups retain the visible painting and disposal removes pendi
   const { journey, archived, tick } = setup();
   journey.begin('first', '星月夜'); journey.begin('follow-up', '那棵树呢？'); assert.equal(journey.state.painting, starryNight);
   journey.loaded(starryNight.id); journey.capture('follow-up', explanation); journey.exit(); journey.dispose(); tick(10_000); assert.equal(archived.length, 0);
+});
+
+test('begin returns the current scene synchronously for one consistent dialogue-round context', () => {
+  const { journey, tick } = setup();
+  const viewing = journey.begin('scene-first', '星月夜');
+  assert.equal(viewing.painting, starryNight);
+  journey.loaded(starryNight.id); journey.capture('scene-first', explanation); journey.exit(); tick(frame + file);
+  const table = journey.begin('scene-next', '换个话题，今天想做什么？');
+  assert.equal(table.painting, null);
+  journey.notice('scene-next', '想再看看睡莲');
+  assert.equal(journey.state.painting, null, 'the explicit exit still suppresses incidental assistant titles');
+  assert.equal(table.painting, null, 'round context remains the initial snapshot');
 });

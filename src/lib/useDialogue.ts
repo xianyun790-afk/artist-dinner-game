@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Artist } from './types';
-import { dialogueBody, dialogueRoot, requestDialogue, type DialogueLine } from './dialogueService';
+import { dialogueBody, dialogueRoot, requestDialogue, type DialogueLine, type DialogueContext } from './dialogueService';
 import type { ArtistExpression } from './artistExpression';
 const base = (import.meta.env.VITE_DIALOGUE_SERVICE_URL || '').trim();
 export function useDialogue() {
@@ -20,14 +20,14 @@ export function useDialogue() {
     finally { clearTimeout(timer); }
   }, []);
   useEffect(() => { void refresh(); return () => { metadata.current?.abort(); metadata.current = null; }; }, [refresh]);
-  const reply = useCallback(async (artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group', fallback: string, signal: AbortSignal, onSentence?: (text: string) => void, onIncomplete?: () => void, expression: ArtistExpression = 'calm') => {
+  const reply = useCallback(async (artist: Artist, text: string, history: DialogueLine[], mode: 'private' | 'group', fallback: string, signal: AbortSignal, onSentence?: (text: string) => void, onIncomplete?: () => void, expression: ArtistExpression = 'calm', context: DialogueContext = { scene: 'table' }) => {
     if (!base) { onSentence?.(fallback); return fallback; }
     setError(''); const controller = new AbortController();
     const cancel = () => controller.abort(signal.reason); if (signal.aborted) cancel(); else signal.addEventListener('abort', cancel, { once: true });
     const timer = setTimeout(() => controller.abort(), 40000);
     let delivered = '';
     try {
-      const line = await requestDialogue(base, dialogueBody(artist, text, history, mode, expression), controller.signal, fetch, onSentence ? sentence => {
+      const line = await requestDialogue(base, dialogueBody(artist, text, history, mode, expression, context), controller.signal, fetch, onSentence ? sentence => {
         delivered += sentence; onSentence(sentence);
       } : undefined);
       if (signal.aborted) throw new DOMException('已打断', 'AbortError');

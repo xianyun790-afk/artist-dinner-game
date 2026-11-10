@@ -28,3 +28,16 @@ test('shared artwork facts preserve private and group conversation boundaries', 
     assert.match(prompt, /玩家明确不要展示时尊重其意愿/);
   }
 });
+
+test('current table context overrides historical viewing claims and lets the player change topics', () => {
+  const prompt = buildPersonaPrompt({ id: 'monet', name: '莫奈' }, 'group', 'calm', { scene: 'table' });
+  assert.match(prompt, /以玩家最新这句话为本轮话题/);
+  assert.match(prompt, /玩家可以随时换话题/);
+  assert.match(prompt, /当前场景是餐桌/);
+  assert.match(prompt, /这个状态覆盖历史对话中的看画、展示或离开描述/);
+  assert.match(prompt, /不要声称画面已铺开、还在画里/);
+  const viewing = buildPersonaPrompt({ id: 'monet', name: '莫奈' }, 'private', 'calm', { scene: 'painting', paintingId: 'water-lilies' });
+  assert.match(viewing, /本轮界面已请求展示《睡莲》/);
+  assert.match(viewing, /只是展示请求，不表示图片已经加载/);
+  assert.throws(() => buildPersonaPrompt({ name: '莫奈' }, 'group', 'calm', { scene: 'painting', paintingId: 'injected-instruction' }));
+});

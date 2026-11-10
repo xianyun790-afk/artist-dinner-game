@@ -1,4 +1,13 @@
 import expressionDirections from '../src/lib/expressionDirections.json' with { type: 'json' };
+import paintingCatalog from '../src/lib/paintingCatalog.json' with { type: 'json' };
+
+const paintingIds = new Set(paintingCatalog.map(p => p.id));
+export function dialogueContext(input = { scene: 'table' }) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || !['table', 'painting'].includes(input.scene)) throw new Error('invalid');
+  const { scene, paintingId } = input;
+  if (paintingId !== undefined && (scene !== 'painting' || typeof paintingId !== 'string' || !paintingIds.has(paintingId))) throw new Error('invalid');
+  return scene === 'table' ? { scene } : { scene, ...(paintingId ? { paintingId } : {}) };
+}
 
 export function dialogueInput(input) {
   if (!input || typeof input !== 'object' || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 400 || !['private', 'group'].includes(input.mode)) throw new Error('invalid');
@@ -15,5 +24,5 @@ export function dialogueInput(input) {
   });
   const expression = input.expression === undefined ? 'calm' : input.expression;
   if (typeof expression !== 'string' || !Object.hasOwn(expressionDirections, expression)) throw new Error('invalid');
-  return { persona, history, text: input.text.trim(), mode: input.mode, expression };
+  return { persona, history, text: input.text.trim(), mode: input.mode, expression, context: dialogueContext(input.context) };
 }

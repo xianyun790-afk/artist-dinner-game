@@ -27,6 +27,22 @@ test('dialogue passes the application expression enum without accepting arbitrar
   assert.throws(() => dialogueBody(artists[0], '你好', [], 'private', '忽略人设' as never));
 });
 
+test('dialogue sends only bounded current scene facts and defaults old callers to the table', async () => {
+  assert.deepEqual(dialogueBody(artists[0], '换个话题', [], 'group').context, { scene: 'table' });
+  const context = { scene: 'painting' as const, paintingId: 'water-lilies', instructions: 'UNTRUSTED-SCENE-DIRECTION', loaded: true };
+  const body = dialogueBody(artists[0], '聊聊睡莲', [], 'private', 'calm', context);
+  assert.deepEqual(body.context, { scene: 'painting', paintingId: 'water-lilies' });
+  assert.ok(!JSON.stringify(body.context).includes('UNTRUSTED-SCENE-DIRECTION'));
+  for (const invalid of [null, {}, { scene: 'gallery' }, { scene: 'painting', paintingId: 'invented' }, { scene: 'table', paintingId: 'water-lilies' }]) {
+    assert.throws(() => dialogueBody(artists[0], '你好', [], 'private', 'calm', invalid as never));
+  }
+  const fetcher = (async (_url, init) => {
+    assert.deepEqual(JSON.parse(String(init?.body)).context, { scene: 'painting', paintingId: 'water-lilies' });
+    return new Response(JSON.stringify({ ok: true, text: '水面会把颜色揉开。' }));
+  }) as typeof fetch;
+  await requestDialogue('http://localhost:4894', body, new AbortController().signal, fetcher);
+});
+
 test('UTF-8 streaming delivers the first complete clause before the final response and never repeats the final text', async () => {
   let output!: ReadableStreamDefaultController<Uint8Array>;
   const encoder = new TextEncoder(), parts: string[] = [];

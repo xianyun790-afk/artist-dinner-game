@@ -49,6 +49,34 @@ test('a continuation during the endpoint grace joins the self-correction before 
   assert.equal(h.sent.length, 1); assert.equal(h.sent[0].text, '我刚才在公园。不对，是地铁。');
 });
 
+test('a repeated old final cannot submit while a resumed phrase awaits its transcript', () => {
+  const h = harness(); h.turn.speechStart(); h.turn.results([final('我想聊睡莲。')]); h.advance(200);
+  h.turn.speechStart(); h.advance(40); h.turn.results([final('我想聊睡莲。')]); h.advance(800);
+  assert.equal(h.sent.length, 0);
+  h.turn.results([final('我想聊睡莲。'), partial('还有')]); h.advance(400);
+  assert.equal(h.sent.length, 0);
+  h.turn.results([final('我想聊睡莲。'), final('还有它的颜色。')]); h.advance(360);
+  assert.equal(h.sent.length, 1); assert.equal(h.sent[0].text, '我想聊睡莲。还有它的颜色。');
+});
+
+test('speech ending without a new transcript gives delayed results a fresh grace period', () => {
+  const h = harness(); h.turn.results([final('我想聊睡莲。')]); h.advance(200);
+  h.turn.speechStart(); h.turn.results([final('我想聊睡莲。')]); h.advance(800);
+  h.turn.speechEnd(); h.advance(359); assert.equal(h.sent.length, 0);
+  h.turn.results([final('我想聊睡莲。'), final('不对，先聊星空。')]); h.advance(360);
+  assert.equal(h.sent[0].text, '我想聊睡莲。不对，先聊星空。');
+});
+
+test('browser auto-end during an interim continuation keeps time for the restarted session', () => {
+  const h = harness(); h.turn.results([final('我想说，')]); h.advance(100);
+  h.turn.speechStart(); h.turn.results([final('我想说，'), partial('今天')]); h.advance(500);
+  h.turn.sessionEnded(); h.advance(100); h.turn.speechStart();
+  h.turn.results([partial('今天先不画画')]); h.advance(500);
+  assert.equal(h.sent.length, 0);
+  h.turn.results([final('今天先不画画。')]); h.advance(360);
+  assert.equal(h.sent[0].text, '我想说，今天先不画画。');
+});
+
 test('browser auto-end and restart retain finals without discarding the remaining grace period', () => {
   const h = harness(); h.turn.results([final('我想说，')]); h.advance(100); h.turn.sessionEnded();
   h.advance(100); h.turn.speechStart(); h.turn.results([partial('今天')]); h.advance(500);

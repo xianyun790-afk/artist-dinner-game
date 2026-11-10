@@ -30,6 +30,44 @@ test('at most two syntheses are in flight and cancellation discards late audio w
   pending.resolve('late'); await tick();
   assert.equal(prepared, 2); assert.equal(played, 0);
 });
+test('a new streamed sentence cannot oversubscribe a slot released to an awaiting synthesis', async () => {
+  const controller = new AbortController(), gates = new Map(['A', 'B', 'C', 'D'].map(text => [text, deferred<string>()]));
+  let active = 0, peak = 0;
+  const prepared: string[] = [], played: string[] = [];
+  const queue = createSpeechQueue({ signal: controller.signal,
+    prepare: async text => {
+      prepared.push(text); active++; peak = Math.max(peak, active);
+      try { return await gates.get(text)!.promise; } finally { active--; }
+    }, play: async text => { played.push(text); },
+  });
+  queue.push('A'); queue.push('B'); queue.push('C');
+  gates.get('A')!.resolve('A');
+  // A releases its slot, but C has not yet resumed through Promise.race.
+  await Promise.resolve(); await Promise.resolve();
+  queue.push('D');
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(peak, 2); assert.equal(active, 2);
+  queue.end(); for (const [text, gate] of gates) gate.resolve(text);
+  await queue.done;
+  assert.equal(peak, 2); assert.equal(prepared.length, 4);
+  assert.deepEqual(played, ['A', 'B', 'C', 'D']);
+});
+test('cancelling during slot reacquisition resolves without starting a late waiting synthesis', async () => {
+  const controller = new AbortController(), gates = new Map(['A', 'B', 'C', 'D'].map(text => [text, deferred<string>()]));
+  const prepared: string[] = [], played: string[] = [];
+  const queue = createSpeechQueue({ signal: controller.signal,
+    prepare: async text => { prepared.push(text); return await gates.get(text)!.promise; },
+    play: async text => { played.push(text); },
+  });
+  queue.push('A'); queue.push('B'); queue.push('C');
+  gates.get('A')!.resolve('A'); await Promise.resolve(); await Promise.resolve();
+  queue.push('D'); controller.abort(); await queue.done;
+  const heardBeforeLateResults = [...played];
+  for (const [text, gate] of gates) gate.resolve(text);
+  await tick();
+  assert.deepEqual(prepared, ['A', 'B', 'D']);
+  assert.deepEqual(played, heardBeforeLateResults);
+});
 test('interrupting playback resolves the queue and prevents remaining ready audio from playing', async () => {
   const controller = new AbortController(), playing = deferred<void>(); const heard: string[] = [];
   const queue = createSpeechQueue({ signal: controller.signal, prepare: async text => text,
