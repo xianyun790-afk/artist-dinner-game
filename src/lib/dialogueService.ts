@@ -1,7 +1,7 @@
 import type { Artist } from './types';
 import { speechParts } from './speechQueue.ts';
 import { isArtistExpression, type ArtistExpression } from './artistExpression.ts';
-import { paintingCatalog } from './paintings.ts';
+import { findNamedPainting, paintingCatalog } from './paintings.ts';
 export interface DialogueLine { who: 'player' | 'artist'; name?: string; text: string }
 export type DialogueContext = { scene: 'table' } | { scene: 'painting'; paintingId?: string };
 const paintingIds = new Set(paintingCatalog.map(p => p.id));
@@ -15,7 +15,11 @@ export function dialogueBody(artist: Artist, text: string, history: DialogueLine
   if (!text.trim() || text.length > 400) throw new Error('请输入 1–400 字。');
   if (!isArtistExpression(expression)) throw new Error('人物表达状态不正确。');
   const { id, name, fullName, identityType, personality, bio, medium } = artist;
+  // Discussing a work without displaying it still needs its facts. Never send
+  // artwork references from a previous turn as this turn's subject.
+  const workId = findNamedPainting(text)?.id;
   return { persona: { id, name, fullName, identityType, personality, bio, medium }, text: text.trim(), mode, expression, context: dialogueContext(context),
+    ...(workId ? { workId } : {}),
     history: history.slice(-12).map(m => ({ who: m.who, ...(m.name ? { name: m.name.slice(0, 80) } : {}), text: m.text.slice(0, 2000) })),
   };
 }

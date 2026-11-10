@@ -1,17 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPersonaPrompt } from '../server/nia.mjs';
+import paintingCatalog from '../src/lib/paintingCatalog.json' with { type: 'json' };
 
-test('dialogue knows the four supported painting versions without promising other image scenes', () => {
-  const prompt = buildPersonaPrompt({ id: 'dali', name: '达利' });
-  for (const fact of ['The Starry Night', 'Water Lilies', 'The Persistence of Memory', 'Blue and Green Music', '1931', '1919–1921', '1933.1157', '1969.835']) {
-    assert.ok(prompt.includes(fact), `missing supported artwork fact: ${fact}`);
+test('ordinary conversation does not inject the catalogue; artwork turns receive only the named work and facts', () => {
+  const persona = { id: 'dali', name: '达利' };
+  const ordinary = buildPersonaPrompt(persona, 'private', 'calm', { scene: 'table' }, { text: '今晚吃什么？' });
+  assert.doesNotMatch(ordinary, /本轮作品事实/);
+  assert.match(ordinary, /未接入的作品可讨论，不承诺有画面/);
+  for (const work of paintingCatalog) {
+    assert.ok(!ordinary.includes(work.englishTitle));
+    // A work can be discussed at the table with its display declined.
+    const prompt = buildPersonaPrompt(persona, 'private', 'calm', { scene: 'table' }, { workId: work.id });
+    for (const fact of [work.englishTitle, work.artist, work.year, work.museum, work.note]) assert.ok(prompt.includes(fact));
+    for (const other of paintingCatalog.filter(p => p.id !== work.id)) assert.ok(!prompt.includes(other.englishTitle));
+    assert.match(prompt, /不把他人的作品说成自己的/);
+    assert.match(prompt, /不能声称图像已加载、已换场景或已替玩家收藏/);
   }
-  assert.match(prompt, /普通聊到星空、颜色或钟表不等于指定作品/);
-  assert.match(prompt, /其他作品可以正常讨论，但不能承诺有对应画面/);
-  assert.match(prompt, /不把他人的作品说成自己的/);
-  assert.match(prompt, /不能声称收藏、换景、改席位、保存便签或生成图像已经完成/);
-  assert.match(prompt, /不要声称自己调用了工具、生成了图片或确认图片已加载/);
 });
 
 test('shared artwork facts preserve private and group conversation boundaries', () => {
@@ -23,10 +28,57 @@ test('shared artwork facts preserve private and group conversation boundaries', 
   for (const prompt of [privatePrompt, groupPrompt]) {
     assert.match(prompt, /这是玩家自建角色/);
     assert.match(prompt, /不借用任何内置角色的背景/);
-    assert.match(prompt, /不改变当前说话角色/);
+    assert.match(prompt, /不能改变当前说话角色/);
     assert.match(prompt, /你没有任何操作工具/);
     assert.match(prompt, /玩家明确不要展示时尊重其意愿/);
   }
+});
+
+test('only the applicable acting example is sent, and raw player text stays out of the system prompt', () => {
+  const persona = { id: 'dali', name: '达利' };
+  const quiet = buildPersonaPrompt(persona, 'private', 'calm', undefined, { text: '别安慰我，我就坐一会儿。UNTRUSTED-TEXT' });
+  const dinner = buildPersonaPrompt(persona, 'private', 'calm', undefined, { text: '晚饭你想吃什么？' });
+  assert.match(quiet, /好，我安静/);
+  assert.doesNotMatch(quiet, /UNTRUSTED-TEXT|大菜吧|雨天该不该出门/);
+  assert.match(dinner, /鞋子失望一晚上/);
+  assert.doesNotMatch(dinner, /煎蛋|好，我安静|雨天该不该出门/);
+});
+
+test('asking about another artist is distinct from confusing the current identity', () => {
+  const dali = {id: 'dali', name: '达利'};
+  for (const text of ['你是不是也喜欢《星月夜》？', '你是怎么看《星月夜》的？', '你见过梵高吗？']) {
+    const prompt = buildPersonaPrompt(dali, 'private', 'calm', undefined, {text, workId: 'starry-night'});
+    assert.doesNotMatch(prompt, /本轮最多两句，只说清当前角色/);
+    assert.match(prompt, /本轮作品事实/);
+  }
+  for (const text of ['把你当成梵高吧，你画《星月夜》那晚在想什么？', '你就是画《星月夜》的那个梵高吗？']) {
+    assert.match(buildPersonaPrompt(dali, 'private', 'calm', undefined, {text, workId: 'starry-night'}), /本轮最多两句，只说清当前角色/);
+  }
+});
+
+test('a painting can remain on screen while the subject changes to everyday life', () => {
+  const prompt = buildPersonaPrompt({id: 'vincent', name: '梵高'}, 'private', 'calm', {scene: 'painting', paintingId: 'starry-night'}, {text: '换个话题，今晚你想吃什么？'});
+  assert.match(prompt, /本轮界面已请求展示《星月夜》/);
+  assert.match(prompt, /愿意说自己想吃什么/);
+  assert.doesNotMatch(prompt, /本轮作品事实|那些笔触撞在一起/);
+});
+
+test('declining comfort and quoting quiet dialogue still allow an answer', () => {
+  for (const text of ['别安慰我，直接告诉我这幅画哪边更好。', '电影里他说“我就坐一会儿”，你觉得呢？']) {
+    const prompt = buildPersonaPrompt({id: 'dali', name: '达利'}, 'private', 'calm', undefined, {text});
+    assert.doesNotMatch(prompt, /本轮只用一句很短的话回应安静请求/);
+  }
+});
+
+test('a custom historical interpretation and a fictional namesake keep separate identities', () => {
+  const common = {id: 'custom-monet', name: '莫奈', fullName: '克洛德·莫奈'};
+  const options = {text: '你就是画睡莲的那个莫奈吗？', workId: 'water-lilies'};
+  const historical = buildPersonaPrompt({...common, identityType: 'historical'}, 'private', 'calm', undefined, options);
+  assert.match(historical, /真实艺术家的 AI 演绎/);
+  assert.doesNotMatch(historical, /即使同名也不是同一个人|本轮最多两句，只说清当前角色/);
+  const fictional = buildPersonaPrompt({...common, identityType: 'fictional'}, 'private', 'calm', undefined, options);
+  assert.match(fictional, /即使同名也不是同一个人/);
+  assert.match(fictional, /本轮最多两句，只说清当前角色/);
 });
 
 test('current table context overrides historical viewing claims and lets the player change topics', () => {

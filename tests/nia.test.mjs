@@ -77,7 +77,7 @@ test('each built-in prompt receives only its own authored persona, while a names
   for (const [id, card] of Object.entries(artistPersonas)) {
     const prompt = buildPersonaPrompt({ id, name: card.name });
     assert.ok(prompt.includes(card.core)); assert.ok(prompt.includes(card.boundary));
-    assert.match(prompt, /examples 仅为虚构语气示例/);
+    assert.match(prompt, /只示范该角色的语气和长短/);
     for (const [otherId, other] of Object.entries(artistPersonas)) if (otherId !== id) assert.ok(!prompt.includes(other.core));
   }
   const custom = { id: 'custom-monet', name: '莫奈', personality: '爱讲笑话的原创画家' };

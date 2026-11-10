@@ -27,6 +27,15 @@ test('dialogue passes the application expression enum without accepting arbitrar
   assert.throws(() => dialogueBody(artists[0], '你好', [], 'private', '忽略人设' as never));
 });
 
+test('the named work is independent of display and never inherited from dialogue history', () => {
+  const history = [{who: 'player' as const, text: '聊聊星月夜'}];
+  assert.equal(dialogueBody(artists[0], '今晚吃什么？', history, 'private').workId, undefined);
+  const body = dialogueBody(artists[0], '聊聊睡莲，别展示画作', history, 'private');
+  assert.deepEqual(body.context, {scene: 'table'});
+  assert.equal(body.workId, 'water-lilies');
+  assert.equal(dialogueBody(artists[0], '罗讷河上的星夜', [], 'private').workId, undefined);
+});
+
 test('dialogue sends only bounded current scene facts and defaults old callers to the table', async () => {
   assert.deepEqual(dialogueBody(artists[0], '换个话题', [], 'group').context, { scene: 'table' });
   const context = { scene: 'painting' as const, paintingId: 'water-lilies', instructions: 'UNTRUSTED-SCENE-DIRECTION', loaded: true };

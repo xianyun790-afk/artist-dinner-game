@@ -67,3 +67,39 @@ test('new artwork replies keep their own voice and leave ordinary topics unchang
   assert.equal(responderFor('这个时钟真奇怪',guests,null,null)?.id,'dali');
   assert.doesNotMatch(roomReply(guests[2],'这个时钟真奇怪')??'',/软下来的钟/);
 });
+
+test('ordinary meal choices answer the question instead of returning a generic permission to chat',()=>{
+  const lines=guests.map(a=>roomReply(a,'你想吃什么？'));
+  assert.ok(lines.every(Boolean));assert.equal(new Set(lines).size,guests.length);
+  for(const line of lines)assert.doesNotMatch(line!,/光影|配色|笔触|日常的小事也可以聊|谢谢/);
+  assert.match(roomReply(guests[0],'我觉得面有点咸')??'',/咸/);
+  assert.match(roomReply(guests[0],'今天不想出门，只想聊电影')??'',/哪一部/);
+  assert.notEqual(roomReply(guests[0],'你好像听错了'),guests[0].greeting);
+});
+
+test('a custom identity keeps a neutral local fallback rather than inheriting a built-in daily taste',()=>{
+  const custom={...guests[0],id:'custom-monet',name:'莫奈'};
+  assert.match(roomReply(custom,'你想吃什么？')??'',/没想好/);
+  assert.doesNotMatch(roomReply(custom,'你想吃什么？')??'',/热汤|面包/);
+});
+
+test('an addressee is not replaced by another artist merely mentioned in the question',()=>{
+  assert.equal(responderFor('达利，你怎么看梵高的画？',guests,'monet','vincent')?.id,'dali');
+  assert.equal(responderFor('你见过梵高吗？',guests,'dali','monet')?.id,'dali');
+  assert.equal(responderFor('你见过梵高吗？',guests,null,'dali')?.id,'dali');
+  assert.equal(responderFor('梵高的画你怎么看？',guests,'dali','monet')?.id,'dali');
+  assert.equal(responderFor('我想问问达利，你怎么看梵高的画？',guests,'monet','vincent')?.id,'dali');
+  assert.equal(responderFor('Salvador Dalí, 你怎么看梵高的画？',guests,'monet','vincent')?.id,'dali');
+  assert.equal(responderFor('电影里他说“莫奈，你怎么看”，你会怎么接？',guests,'dali','vincent')?.id,'dali');
+  const custom={...artists[4],id:'custom-symbol',name:'A+B',fullName:'A+B',english:'A+B'};
+  assert.equal(responderFor('A+B，你怎么看莫奈的画？',[...guests,custom],'dali',null)?.id,custom.id);
+});
+
+test('ordinary follow-ups keep the speaker while fresh topics and named artworks retain routing',()=>{
+  for(const input of ['今天吃什么？','今天觉得累吗？','我喜欢蓝色','我昨天做了一个梦'])assert.equal(responderFor(input,guests,null,'monet')?.id,'monet',input);
+  assert.equal(responderFor('今天吃什么？',guests,null,null)?.id,'georgia');
+  assert.equal(responderFor('我喜欢蓝色',guests,null,null)?.id,'vincent');
+  assert.equal(responderFor('今天聊星月夜',guests,null,'monet')?.id,'vincent');
+  assert.equal(responderFor('今天聊星月夜',guests,'dali','monet')?.id,'dali');
+  assert.equal(responderFor('莫奈，今天聊星月夜',guests,'dali','vincent')?.id,'monet');
+});

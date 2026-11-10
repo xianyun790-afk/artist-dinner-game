@@ -24,5 +24,7 @@ export function dialogueInput(input) {
   });
   const expression = input.expression === undefined ? 'calm' : input.expression;
   if (typeof expression !== 'string' || !Object.hasOwn(expressionDirections, expression)) throw new Error('invalid');
-  return { persona, history, text: input.text.trim(), mode: input.mode, expression, context: dialogueContext(input.context) };
+  const workId = input.workId;
+  if (workId !== undefined && (typeof workId !== 'string' || !paintingIds.has(workId))) throw new Error('invalid');
+  return { persona, history, text: input.text.trim(), mode: input.mode, expression, context: dialogueContext(input.context), ...(workId ? { workId } : {}) };
 }

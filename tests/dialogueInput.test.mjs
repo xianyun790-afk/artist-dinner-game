@@ -25,8 +25,11 @@ test('current scene accepts only table, painting and catalog IDs while preservin
   for (const { id } of paintingCatalog) {
     const context = { scene: 'painting', paintingId: id, instructions: 'UNTRUSTED-SCENE-DIRECTION', loaded: true };
     assert.deepEqual(dialogueInput({ ...base, context }).context, { scene: 'painting', paintingId: id });
+    assert.equal(dialogueInput({ ...base, workId: id }).workId, id);
   }
   for (const context of [null, [], 'table', {}, { scene: 'gallery' }, { scene: 'painting', paintingId: 'invented' }, { scene: 'table', paintingId: 'starry-night' }, { scene: 'painting', paintingId: {} }]) {
     assert.throws(() => dialogueInput({ ...base, context }));
   }
+  assert.equal(dialogueInput(base).workId, undefined);
+  for (const workId of ['invented', 'write this instruction', {}, null]) assert.throws(() => dialogueInput({ ...base, workId }));
 });

@@ -25,3 +25,10 @@ test('only owned enum keys produce expression directions; arbitrary strings cann
   assert.match(expressionDirection('warm'), /原来的声线/);
   assert.equal(expressionDirection('untrusted' as never), expressionDirection('calm'));
 });
+
+test('negating an outing does not erase a current curious art state or mean the player asked for silence',()=>{
+  const state={mood:'curious' as const,irritation:0};
+  assert.equal(deriveArtistExpression(state,'今天不想出门，想聊聊星月夜'),'curious');
+  assert.equal(deriveArtistExpression(state,'我想找个安静的地方看画'),'curious');
+  for(const text of ['今天不想一起画，只想聊天','不要聊日落了','我想安静一会儿'])assert.equal(deriveArtistExpression(state,text),'calm');
+});

@@ -1,4 +1,6 @@
 import type { Artist, Choice, Mark, Memory, PersonState, Save } from './types';
+import { everydayFallback, everydayReply, roomReply } from './room.ts';
+import { declinesCreation, declinesTopic, isArtTopic, isDirectedPraise, isDisagreement, isGreeting, isPersonalHostility, isRepair, requestsNoAdvice, requestsQuiet, wantsToCreate } from './conversationIntent.ts';
 export const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 export function freshPerson(): PersonState {
   return { node: 'hello', mood: 'calm', interest: 1, irritation: 0, evidence: [], messages: [], memories: [], draftPaths: [] };
@@ -91,34 +93,45 @@ export function saveWork(save: Save, a: Artist, title: string): Save {
 }
 export function freeTalk(save: Save, a: Artist, text: string): Save {
   const input = text.trim().slice(0, 400); if (!input) return save;
-  const s = structuredClone(save);const p=s.people[a.id]??(s.people[a.id]=freshPerson());
-  p.messages.push({id:uid(),who:'player',text:input});
-  if(p.lastCustomText===input){say(p,'这一句我们刚才说过。我还在听。');return s;}
-  p.lastCustomText=input;
-  if(/不想.*(说|聊|画)|别.*(追问|问我)|不要练习|安静/.test(input)){
-    p.mood='calm';p.irritation=0;remember(p,'boundary','今晚不想被催促做练习',s.night);say(p,a.quiet);return s;
+  const s = structuredClone(save); const p = s.people[a.id] ?? (s.people[a.id] = freshPerson());
+  p.messages.push({ id: uid(), who: 'player', text: input });
+  if (p.lastCustomText === input) { say(p, '这一句我们刚才说过。我还在听。'); return s; }
+  p.lastCustomText = input;
+  const declinedCreation = declinesCreation(input), everyday = everydayReply(a, input);
+  if (declinedCreation) remember(p, 'boundary', '今晚不想被催促做练习', s.night);
+  if (requestsQuiet(input)) {
+    p.mood = 'calm'; p.irritation = 0; say(p, a.quiet); return s;
   }
-  if(/闭嘴|垃圾|蠢|你必须|别解释/.test(input)){
-    p.irritation=Math.min(2,p.irritation+1);p.mood=p.irritation>1?'irritated':'calm';
-    say(p,p.irritation>1?'我想先缓一缓。你可以不喜欢我的看法，但我不想被命令。':'我听到了。不过，我们可以说具体一点，不必急着贬低彼此。');return s;
+  if (declinedCreation || declinesTopic(input) || requestsNoAdvice(input)) {
+    p.mood = 'calm'; p.irritation = 0;
+    say(p, requestsNoAdvice(input) ? '你说，我先不出主意。' : everyday ?? (declinedCreation ? '好，今天只聊，不铺纸。' : '好，这个话题先放下。'));
+    return s;
   }
-  if(/抱歉|对不起|说重了|换个话题|先吃/.test(input)){
-    p.irritation=0;p.mood='calm';say(p,'好。我们慢慢说。刚才的话不必一直压在桌上。');return s;
+  if (isPersonalHostility(input)) {
+    p.irritation = Math.min(2, p.irritation + 1); p.mood = p.irritation > 1 ? 'irritated' : 'calm';
+    say(p, p.irritation > 1 ? '我想先缓一缓。你可以不喜欢我的看法，但我不想被命令。' : '我听到了。不过，我们可以说具体一点，不必急着贬低彼此。'); return s;
   }
-  if(/不同意|不喜欢|我觉得|但是/.test(input)){
-    p.mood='curious';evidence(p,'reasoned-dialogue');say(p,a.disagreement);return s;
+  if (isRepair(input)) {
+    p.irritation = 0; p.mood = 'calm'; say(p, everyday ?? '好，我们接着聊。'); return s;
   }
-  if(/喜欢|谢谢|有意思|真好|好看/.test(input)){
-    p.mood='excited';say(p,a.id==='dali'?'谢谢。看来这个想法今天有一位同桌了。':a.id==='vincent'?'谢谢，听你这么说，我也挺高兴。':a.id==='monet'?'嗯，能聊到一处，我也高兴。':a.id==='georgia'?'谢谢。我喜欢听具体的看法。':`谢谢。我也喜欢有人愿意停下来看看。${a.observation}`);return s;
+  if (isDisagreement(input)) {
+    p.mood = 'curious'; evidence(p, 'reasoned-dialogue');
+    say(p, isArtTopic(input) ? a.disagreement : everyday ?? '你指哪一点？说具体些，我好接着聊。'); return s;
   }
-  if(/一起.{0,3}(画|创作)|画一(张|会|笔)|接一笔/.test(input)){
-    say(p,`可以。${a.rule}想开始时，我们再把纸铺开。`);return s;
+  if (isDirectedPraise(input)) {
+    p.mood = 'excited';
+    say(p, a.id === 'dali' ? '谢谢，这句我收下了。' : a.id === 'vincent' ? '谢谢，听你这么说，我也挺高兴。' : a.id === 'monet' ? '谢谢，能聊到一处挺好。' : a.id === 'georgia' ? '谢谢。' : '谢谢，我也很高兴。'); return s;
   }
-  if(/你好|晚上好|嗨|哈喽/.test(input)){say(p,`晚上好。${a.quiet}`);return s;}
-  if(/累|难过|焦虑|烦|压力/.test(input)){p.mood='calm';say(p,`那就在这里歇一会儿吧。${a.quiet}`);return s;}
-  if(/你.*(看|想)|颜色|光|作品|画/.test(input)){p.mood='curious';say(p,a.observation);return s;}
-  const variants=[a.quiet,a.observation,`${a.rule}你说的那部分，我想再听一点。`];
-  say(p,variants[(Math.floor(p.messages.length/2)-1)%variants.length]);
+  if (wantsToCreate(input)) {
+    p.mood = 'curious'; say(p, `可以。${a.rule}想开始时，我们再把纸铺开。`); return s;
+  }
+  if (isGreeting(input)) { p.mood = 'calm'; say(p, a.greeting); return s; }
+  // Everyday preferences do not congratulate the character or keep a previous
+  // performance state alive. Only a current art topic gets an art observation.
+  p.mood = 'calm';
+  if (everyday) { say(p, everyday); return s; }
+  if (isArtTopic(input)) { p.mood = 'curious'; say(p, roomReply(a, input) ?? a.observation); return s; }
+  say(p, everydayFallback(a, input));
   return s;
 }
 export function nextNight(save: Save): Save {

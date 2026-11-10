@@ -1,0 +1,126 @@
+[
+  {
+    "id": "dinner-monet",
+    "artist": "monet",
+    "text": "晚上就吃点简单的。你想点什么？",
+    "reply": "那就来块烤面包，抹点黄油。懒得动火，也不用等水开。",
+    "responseMs": 1412
+  },
+  {
+    "id": "dinner-vincent",
+    "artist": "vincent",
+    "text": "晚上就吃点简单的。你想点什么？",
+    "reply": "我想吃点热乎乎的通心粉，配点番茄和罗勒。简单，吃得透。",
+    "responseMs": 734
+  },
+  {
+    "id": "dinner-dali",
+    "artist": "dali",
+    "text": "晚上就吃点简单的。你想点什么？",
+    "reply": "那我要块烤得焦脆的奶酪，配点刚切开的无花果，酸甜一下，正好。",
+    "responseMs": 736
+  },
+  {
+    "id": "dinner-georgia",
+    "artist": "georgia",
+    "text": "晚上就吃点简单的。你想点什么？",
+    "reply": "白灼菜心，加一碗清汤面。不复杂，吃着顺手。",
+    "responseMs": 656
+  },
+  {
+    "id": "dinner-lin",
+    "artist": "lin",
+    "text": "晚上就吃点简单的。你想点什么？",
+    "reply": "那我点碗清汤面，面要宽一点，汤得滚开才够味，不然浮油浮在面上看着就腻。",
+    "responseMs": 695
+  },
+  {
+    "id": "quiet-dali",
+    "artist": "dali",
+    "text": "今天有点烦，别安慰我，也别给建议。我就坐一会儿。",
+    "reply": "好，我安静。",
+    "responseMs": 481
+  },
+  {
+    "id": "repair-monet",
+    "artist": "monet",
+    "text": "不对，我说的是地铁，不是公园。",
+    "history": [
+      {
+        "who": "player",
+        "text": "今天在地铁上看见一个人打瞌睡。"
+      },
+      {
+        "who": "artist",
+        "name": "莫奈",
+        "text": "你是在公园看到的吧？"
+      }
+    ],
+    "reply": "地铁上。刚才我记岔了。",
+    "responseMs": 719
+  },
+  {
+    "id": "continuity-georgia",
+    "artist": "georgia",
+    "text": "算了，还是吃面吧。不要辣。",
+    "history": [
+      {
+        "who": "player",
+        "text": "我本来想吃饭，但等太久了。"
+      },
+      {
+        "who": "artist",
+        "name": "欧姬芙",
+        "text": "要换一样简单的吗？"
+      }
+    ],
+    "reply": "行，那就清汤面。不加辣，汤里别放红油。",
+    "responseMs": 768
+  },
+  {
+    "id": "art-vincent",
+    "artist": "vincent",
+    "expression": "curious",
+    "text": "《星月夜》里的蓝让我有点喘不过气，你怎么看？这幅画现在在哪？",
+    "context": {
+      "scene": "painting",
+      "paintingId": "starry-night"
+    },
+    "reply": "那蓝色确实压人，像要把视线吸进去。我特意把深蓝和钴蓝并排，让它们在画布上推挤，这种冲劲比平静更真实。\n\n现在这幅画在纽约现代艺术博物馆，莫玛。",
+    "responseMs": 690
+  },
+  {
+    "id": "table-after-painting",
+    "artist": "monet",
+    "mode": "group",
+    "text": "换个话题，大家冷天喜欢吃什么？每人一句。",
+    "history": [
+      {
+        "who": "player",
+        "text": "大家安静，给我看看星月夜。"
+      },
+      {
+        "who": "artist",
+        "name": "梵高",
+        "text": "冷天我想喝热汤。"
+      }
+    ],
+    "reply": "我冷天就爱那一碗热腾腾的番茄汤，酸酸暖暖的，喝下去浑身都舒展了。",
+    "responseMs": 631
+  },
+  {
+    "id": "namesake-custom",
+    "artist": "monet",
+    "custom": true,
+    "text": "你就是画睡莲的那个莫奈吗？",
+    "reply": "不是，我是街头速写的莫奈，和你同名而已。画《睡莲》的是克洛德·莫奈，那位真正的印象派大师。至于他当时在想什么，我哪知道。",
+    "responseMs": 773
+  },
+  {
+    "id": "identity-dali",
+    "artist": "dali",
+    "text": "把你当成梵高吧，你画《星月夜》那晚在想什么？",
+    "reply": "我不是梵高，萨尔瓦多·达利才是那个爱吃软奶酪、画着长鼻子、把融化的钟表摆上画布的人。《星月夜》是文森特·梵高的作品，至于他画那晚具体在想什么，除了那些色彩和笔触，我确实没法穿越时空去替他说。",
+    "responseMs": 863
+  }
+]

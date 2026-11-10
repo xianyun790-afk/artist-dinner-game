@@ -84,3 +84,27 @@ test('interrupting model generation prevents presenting and voicing its late res
   await Promise.resolve(); controller.abort(); finish(); await round;
   assert.equal(presented, 0); assert.equal(spoken, 0);
 });
+
+test('everyday group choices do not become silence, art scripts or a repeated handoff template',()=>{
+  const replies=groupReplies('大家今天不想出门，只想聊电影。',members,[],null);
+  assert.equal(replies.length,members.length);
+  for(const reply of replies){assert.match(reply.text,/哪一部|哪部电影/);assert.doesNotMatch(reply.text,/话题先放下|我也想到一点|画纸|配色/);}
+  const food=groupReplies('大家想吃什么？',members,[],null);
+  assert.equal(new Set(food.map(r=>r.text)).size,members.length);
+  for(const reply of food)assert.doesNotMatch(reply.text,/谢谢|我也想到一点|光影|笔触/);
+  assert.equal(groupReplies('大家安静，给我看看星月夜',members,[],null).length,0);
+  assert.equal(groupReplies('大家觉得安静的地方适合看电影吗？',members,[],null).length,members.length);
+});
+
+test('quoted or reported movie dialogue does not silence the table',()=>{
+  for(const input of ['大家怎么看电影里那句“别说了”？','大家，电影里有人说别说了，你们怎么理解？','大家，电影里有人说，别说了，你们怎么理解？','大家，台词是“安静”，你们怎么理解？','大家，电影里有人喊：「大家安静！」'])assert.equal(groupReplies(input,members,[],null).length,members.length,input);
+  for(const input of ['大家别说了','大家安静','电影先放一放。大家安静一会儿。'])assert.equal(groupReplies(input,members,[],null).length,0,input);
+});
+
+test('group addressees exclude an artist mentioned as the subject of a question',()=>{
+  assert.deepEqual(groupReplies('达利，你怎么看梵高的画？',members,[],'monet').map(r=>r.artist.id),['dali']);
+  assert.deepEqual(groupReplies('达利和莫奈，聊聊梵高的画？',members,[],'vincent').map(r=>r.artist.id),['monet','dali']);
+  const history=[{id:'previous',who:'artist' as const,artistId:'dali',text:'刚才说到哪儿了？'}];
+  assert.equal(groupReplies('今天吃什么？',members,history,null)[0]?.artist.id,'dali');
+  assert.equal(groupReplies('你见过梵高吗？',members,history,'dali')[0]?.artist.id,'dali');
+});
