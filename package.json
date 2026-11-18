@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "build:pages": "VITE_BASE_PATH=/projects/afterglow/ npm run build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
     "dialogue": "node server/index.mjs"

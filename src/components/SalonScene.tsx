@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Artist, PersonState } from '@/lib/types';
 import {topicFor} from '@/lib/room';
+import {asset} from '@/lib/asset';
 
 
 
@@ -32,12 +33,12 @@ export function SalonScene({guests,people,activeId,preferredId,onSelect,speaking
       if(portrait){const replacements=mats.map(m=>{const original=m as THREE.MeshStandardMaterial;const basic=new THREE.MeshBasicMaterial({map:original.map,transparent:true,alphaTest:.02,side:THREE.DoubleSide,depthWrite:true,toneMapped:false});m.dispose();return basic;});o.material=Array.isArray(o.material)?replacements:replacements[0];}
       else if(o.name.startsWith('White_studio')){mats.forEach(m=>m.dispose());o.material=new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false,side:THREE.DoubleSide});}else mats.forEach(m=>{m.side=THREE.DoubleSide;});
     }});
-    loader.load('/models/salon.glb',g=>{if(dead){disposeObject(g.scene);return;}prepare(g.scene);scene.add(g.scene);if(++loaded>=guests.length+1)setReady(true);},undefined,()=>{if(!dead)setFailed(true);});
+    loader.load(asset('/models/salon.glb'),g=>{if(dead){disposeObject(g.scene);return;}prepare(g.scene);scene.add(g.scene);if(++loaded>=guests.length+1)setReady(true);},undefined,()=>{if(!dead)setFailed(true);});
     const spacing=guests.length===1?0:Math.min(3.25,10.4/(guests.length-1));
     const positions=guests.map((_,i)=>(i-(guests.length-1)/2)*spacing);
     guests.forEach((a,i)=>{
       const model=a.image.match(/\/([a-z]+)\.webp$/)?.[1]??'lin';
-      loader.load(`/models/${model}.glb`,g=>{
+      loader.load(asset(`/models/${model}.glb`),g=>{
         if(dead){disposeObject(g.scene);return;}
         g.scene.position.set(positions[i],1.46,.9);g.scene.scale.setScalar(guests.length>=5?.76:.88);prepare(g.scene,true);
         // A real skin deforms the portrait; the whole root only places it at a seat.

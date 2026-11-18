@@ -1,4 +1,5 @@
 import catalog from './paintingCatalog.json' with { type: 'json' };
+import { asset } from './asset';
 export interface Painting {
   id: string;
   artistId: string;
@@ -16,7 +17,7 @@ export interface Painting {
   imageSourceUrl: string;
 }
 
-export const paintingCatalog: Painting[] = catalog;
+export const paintingCatalog: Painting[] = catalog.map(p => ({ ...p, image: asset(p.image) }));
 export const starryNight = paintingCatalog.find(p => p.id === 'starry-night')!;
 export const waterLilies = paintingCatalog.find(p => p.id === 'water-lilies')!;
 export const persistenceOfMemory = paintingCatalog.find(p => p.id === 'persistence-of-memory')!;
